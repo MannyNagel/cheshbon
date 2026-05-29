@@ -5,17 +5,18 @@ export type CloudStatus = {
   configured: boolean;
   signedIn: boolean;
   email: string | null;
+  name: string | null;
   lastSyncedAt: string | null;
 };
 
 export async function getCloudStatus(): Promise<CloudStatus> {
   if (!isSupabaseConfigured || !supabase) {
-    return { configured: false, signedIn: false, email: null, lastSyncedAt: null };
+    return { configured: false, signedIn: false, email: null, name: null, lastSyncedAt: null };
   }
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
   const user = sessionData.session?.user;
-  if (!user) return { configured: true, signedIn: false, email: null, lastSyncedAt: null };
+  if (!user) return { configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null };
 
   const { data, error } = await supabase
     .from('cloud_snapshots')
@@ -28,6 +29,7 @@ export async function getCloudStatus(): Promise<CloudStatus> {
     configured: true,
     signedIn: true,
     email: user.email ?? null,
+    name: getUserDisplayName(user.user_metadata),
     lastSyncedAt: data?.updated_at ?? null,
   };
 }
@@ -39,9 +41,32 @@ export async function signInToCloud(email: string, password: string) {
   return pullCloudDataToLocalIfAvailable();
 }
 
-export async function signUpForCloud(email: string, password: string) {
+export async function signUpForCloud(name: string, email: string, password: string) {
   const client = requireSupabase();
-  const { error } = await client.auth.signUp({ email: email.trim(), password });
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error('Name is required to create an account.');
+  const { error } = await client.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      data: {
+        full_name: trimmedName,
+        name: trimmedName,
+      },
+    },
+  });
+  if (error) throw error;
+}
+
+export async function signInWithGoogle() {
+  const client = requireSupabase();
+  const redirectTo = getAuthRedirectUrl();
+  const { error } = await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+    },
+  });
   if (error) throw error;
 }
 
@@ -127,4 +152,16 @@ async function requireUser() {
   if (error) throw error;
   if (!data.user) throw new Error('Sign in before syncing.');
   return data.user;
+}
+
+function getAuthRedirectUrl() {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/settings`;
+  }
+  return undefined;
+}
+
+function getUserDisplayName(metadata: Record<string, unknown> | null | undefined) {
+  const name = metadata?.full_name ?? metadata?.name;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
 }

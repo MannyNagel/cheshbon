@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
@@ -15,7 +15,9 @@ import {
 import {
   getCloudStatus,
   pullCloudDataToLocal,
+  pullCloudDataToLocalIfAvailable,
   pushLocalDataToCloud,
+  signInWithGoogle,
   signInToCloud,
   signOutOfCloud,
   signUpForCloud,
@@ -30,10 +32,13 @@ export default function SettingsScreen() {
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
   const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
   const [exportText, setExportText] = useState('');
+  const [authMode, setAuthMode] = useState<'signIn' | 'create'>('signIn');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const autoPulledAccountRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     const [nextCloudStatus, nextDomainRows, nextBlockerRows] = await Promise.all([
@@ -49,6 +54,24 @@ export default function SettingsScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!cloudStatus?.signedIn) {
+      autoPulledAccountRef.current = null;
+      return;
+    }
+    const accountKey = cloudStatus.email ?? 'signed-in';
+    if (autoPulledAccountRef.current === accountKey) return;
+    autoPulledAccountRef.current = accountKey;
+    pullCloudDataToLocalIfAvailable()
+      .then(async (syncedAt) => {
+        if (syncedAt) setMessage(`Cloud backup restored: ${formatDateTime(syncedAt)}`);
+        await load();
+      })
+      .catch((error) => {
+        setMessage(error instanceof Error ? error.message : 'Cloud restore failed.');
+      });
+  }, [cloudStatus, load]);
 
   async function previewExport() {
     setExportText(await exportAllData());
@@ -96,7 +119,7 @@ export default function SettingsScreen() {
           <Text style={styles.cloudStatus}>
             {cloudStatus.configured
               ? cloudStatus.signedIn
-                ? `Signed in: ${cloudStatus.email ?? 'account'}`
+                ? `Signed in: ${cloudStatus.name ? `${cloudStatus.name} · ` : ''}${cloudStatus.email ?? 'account'}`
                 : 'Not signed in'
               : 'Not configured'}
           </Text>
@@ -128,6 +151,20 @@ export default function SettingsScreen() {
           </View>
         ) : (
           <View style={styles.signInBox}>
+            <View style={styles.authModeRow}>
+              <ModeButton active={authMode === 'signIn'} label="Sign in" onPress={() => setAuthMode('signIn')} />
+              <ModeButton active={authMode === 'create'} label="Create account" onPress={() => setAuthMode('create')} />
+            </View>
+            {authMode === 'create' ? (
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={setFullName}
+                placeholder="Name"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+                value={fullName}
+              />
+            ) : null}
             <TextInput
               autoCapitalize="none"
               keyboardType="email-address"
@@ -148,16 +185,18 @@ export default function SettingsScreen() {
             <View style={styles.actions}>
               <ActionButton
                 disabled={busy}
-                icon={<LogIn color={colors.ink} size={17} />}
-                label="Sign in"
-                onPress={() => runCloudAction(() => signInToCloud(email, password), 'Signed in and refreshed.')}
+                icon={authMode === 'signIn' ? <LogIn color={colors.ink} size={17} /> : <UserPlus color={colors.ink} size={17} />}
+                label={authMode === 'signIn' ? 'Sign in' : 'Create account'}
+                onPress={() =>
+                  authMode === 'signIn'
+                    ? runCloudAction(() => signInToCloud(email, password), 'Signed in and refreshed.')
+                    : runCloudAction(
+                        () => signUpForCloud(fullName, email, password),
+                        'Account created. Check email if confirmation is required.',
+                      )
+                }
               />
-              <ActionButton
-                disabled={busy}
-                icon={<UserPlus color={colors.ink} size={17} />}
-                label="Create account"
-                onPress={() => runCloudAction(() => signUpForCloud(email, password), 'Account created. Check email if confirmation is required.')}
-              />
+              <ActionButton disabled={busy} icon={<LogIn color={colors.ink} size={17} />} label="Sign in with Google" onPress={() => runCloudAction(signInWithGoogle, 'Redirecting to Google.')} />
             </View>
           </View>
         )}
@@ -197,6 +236,14 @@ function ActionButton({
     <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.actionButton, disabled && styles.disabled]}>
       {icon}
       <Text style={styles.actionText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
+      <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -389,6 +436,33 @@ const styles = StyleSheet.create({
   },
   signInBox: {
     gap: spacing.sm,
+  },
+  authModeRow: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    padding: 3,
+  },
+  modeButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    flex: 1,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  modeButtonActive: {
+    backgroundColor: colors.blue,
+  },
+  modeText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  modeTextActive: {
+    color: '#FFFFFF',
   },
   actionButton: {
     alignItems: 'center',
