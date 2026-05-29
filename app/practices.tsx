@@ -33,6 +33,7 @@ type TaskRow = {
   sortOrder: number;
   archivedFrom: string | null;
   blockerIds: string[];
+  blockersConfigured: number;
 };
 
 const metricOptions: Array<{ id: MetricKind; label: string }> = [
@@ -51,6 +52,7 @@ const emptyForm = {
   metricKind: 'quality' as MetricKind,
   required: false,
   enabled: true,
+  blockersEnabled: true,
   blockerIds: [] as string[],
 };
 
@@ -93,6 +95,7 @@ export default function PracticesScreen() {
         domainId: options.domains[0]?.id ?? '',
         routineId: params.routineId ?? options.routines[0]?.id ?? '',
         reviewSectionId: options.reviewSections[0]?.id ?? '',
+        blockersEnabled: true,
         blockerIds: options.blockers.map((blocker) => blocker.id),
       });
       setMode('add');
@@ -139,6 +142,7 @@ export default function PracticesScreen() {
       domainId: options?.domains[0]?.id ?? '',
       routineId: options?.routines[0]?.id ?? '',
       reviewSectionId: options?.reviewSections[0]?.id ?? '',
+      blockersEnabled: true,
       blockerIds: options?.blockers.map((blocker) => blocker.id) ?? [],
     });
     setMode('add');
@@ -156,7 +160,8 @@ export default function PracticesScreen() {
       metricKind: metricTypeToKind(task.metricType),
       required: task.required === 1,
       enabled: task.enabled === 1,
-      blockerIds: task.blockerIds.length ? task.blockerIds : options?.blockers.map((blocker) => blocker.id) ?? [],
+      blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
+      blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
     });
     setMode('edit');
     setMessage(null);
@@ -363,11 +368,29 @@ function TaskForm({
         <ChoiceGrid choices={domainChoices} selectedId={form.domainId} onSelect={(domainId) => setForm((current) => ({ ...current, domainId }))} />
       </Field>
       <Field label="Blockers for this practice">
-        <MultiChoiceGrid
-          choices={options.blockers}
-          selectedIds={form.blockerIds}
-          onChange={(blockerIds) => setForm((current) => ({ ...current, blockerIds }))}
-        />
+        <View style={styles.fieldStack}>
+          <Toggle
+            label={form.blockersEnabled ? 'Use blockers' : 'No blockers'}
+            selected={form.blockersEnabled}
+            onPress={() =>
+              setForm((current) => {
+                const blockersEnabled = !current.blockersEnabled;
+                return {
+                  ...current,
+                  blockersEnabled,
+                  blockerIds: blockersEnabled ? options.blockers.map((blocker) => blocker.id) : [],
+                };
+              })
+            }
+          />
+          {form.blockersEnabled ? (
+            <MultiChoiceGrid
+              choices={options.blockers}
+              selectedIds={form.blockerIds}
+              onChange={(blockerIds) => setForm((current) => ({ ...current, blockerIds }))}
+            />
+          ) : null}
+        </View>
       </Field>
       <View style={styles.switchRow}>
         <Toggle label={form.required ? 'Required' : 'Optional'} selected={form.required} onPress={() => setForm((current) => ({ ...current, required: !current.required }))} />
@@ -522,6 +545,7 @@ const styles = StyleSheet.create({
   form: { backgroundColor: colors.surface, borderColor: colors.softLine, borderRadius: 8, borderWidth: 1, gap: spacing.lg, padding: spacing.lg },
   formActions: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   field: { gap: spacing.sm },
+  fieldStack: { alignItems: 'flex-start', gap: spacing.sm },
   label: { color: colors.ink, fontSize: 14, fontWeight: '900' },
   input: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 15, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

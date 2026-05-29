@@ -63,6 +63,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
   const visibleBlockers = Array.isArray(item.allowedBlockerIds)
     ? blockers.filter((blocker) => item.allowedBlockerIds?.includes(blocker.id))
     : blockers;
+  const showBlockers = visibleBlockers.length > 0;
 
   return (
     <View style={styles.card}>
@@ -87,11 +88,13 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
       {collapseAfterNotApplicable ? null : (
         <>
       <View style={styles.quickActions}>
-        <BlockerSelector
-          blockers={visibleBlockers}
-          onChange={(blockerIds) => onChange({ ...entry, blockerIds })}
-          selectedIds={entry.blockerIds}
-        />
+        {showBlockers ? (
+          <BlockerSelector
+            blockers={visibleBlockers}
+            onChange={(blockerIds) => onChange({ ...entry, blockerIds })}
+            selectedIds={entry.blockerIds.filter((blockerId) => visibleBlockers.some((blocker) => blocker.id === blockerId))}
+          />
+        ) : null}
         <Pressable accessibilityRole="button" onPress={() => setNoteOpen((value) => !value)} style={styles.noteButton}>
           <StickyNote color={colors.ink} size={17} />
           <Text style={styles.noteButtonText}>{entry.note ? 'Note added' : 'Add note'}</Text>

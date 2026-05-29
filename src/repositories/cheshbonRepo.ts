@@ -519,16 +519,20 @@ export async function getTasksForManagement() {
     }
   }
   const blockerRows = practiceIds.length
-    ? await db.getAllAsync<{ practice_id: string; blocker_id: string }>(
-        `SELECT practice_id, blocker_id FROM practice_blockers WHERE enabled = 1 AND practice_id IN (${practiceIds.map(() => '?').join(',')})`,
+    ? await db.getAllAsync<{ practice_id: string; blocker_id: string; enabled: number }>(
+        `SELECT practice_id, blocker_id, enabled FROM practice_blockers WHERE practice_id IN (${practiceIds.map(() => '?').join(',')})`,
         practiceIds,
       )
     : [];
   const blockersByPractice = new Map<string, string[]>();
+  const customizedBlockerPractices = new Set<string>();
   for (const row of blockerRows) {
-    const list = blockersByPractice.get(row.practice_id) ?? [];
-    list.push(row.blocker_id);
-    blockersByPractice.set(row.practice_id, list);
+    customizedBlockerPractices.add(row.practice_id);
+    if (row.enabled === 1) {
+      const list = blockersByPractice.get(row.practice_id) ?? [];
+      list.push(row.blocker_id);
+      blockersByPractice.set(row.practice_id, list);
+    }
   }
   return rows.map((row) => ({
     ...row,
@@ -536,6 +540,7 @@ export async function getTasksForManagement() {
     metricName: firstMetricByPractice.get(row.practiceId)?.name ?? null,
     metricType: firstMetricByPractice.get(row.practiceId)?.metric_type ?? null,
     blockerIds: blockersByPractice.get(row.practiceId) ?? [],
+    blockersConfigured: customizedBlockerPractices.has(row.practiceId) ? 1 : 0,
   }));
 }
 

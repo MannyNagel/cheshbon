@@ -201,43 +201,6 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
             ))
           )}
 
-          <View style={styles.reflection}>
-            <Text style={styles.reflectionTitle}>Overall Reflection</Text>
-            <ScaleRow
-              label="General day rating"
-              onChange={(generalDayRating) =>
-                setDraft((current) => ({ ...current, session: { ...current.session, generalDayRating } }))
-              }
-              value={draft.session.generalDayRating ?? null}
-            />
-            <ReflectionInput
-              label="Main win"
-              onChangeText={(mainWin) => setDraft((current) => ({ ...current, session: { ...current.session, mainWin } }))}
-              value={draft.session.mainWin ?? ''}
-            />
-            <ReflectionInput
-              label="Main struggle"
-              onChangeText={(mainStruggle) =>
-                setDraft((current) => ({ ...current, session: { ...current.session, mainStruggle } }))
-              }
-              value={draft.session.mainStruggle ?? ''}
-            />
-            <ReflectionInput
-              label="Pattern noticed"
-              onChangeText={(patternNoticed) =>
-                setDraft((current) => ({ ...current, session: { ...current.session, patternNoticed } }))
-              }
-              value={draft.session.patternNoticed ?? ''}
-            />
-            <ReflectionInput
-              label="Adjustment for tomorrow"
-              onChangeText={(adjustmentForTomorrow) =>
-                setDraft((current) => ({ ...current, session: { ...current.session, adjustmentForTomorrow } }))
-              }
-              value={draft.session.adjustmentForTomorrow ?? ''}
-            />
-          </View>
-
           <Pressable accessibilityRole="button" disabled={saving} onPress={save} style={styles.saveButton}>
             <Save color="#FFFFFF" size={18} />
             <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save review'}</Text>
@@ -272,50 +235,6 @@ function IconButton({ label, children, onPress }: { label: string; children: Rea
     <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={styles.iconButton}>
       {children}
     </Pressable>
-  );
-}
-
-function ScaleRow({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number) => void }) {
-  return (
-    <View style={styles.scaleBlock}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={styles.scaleGrid}>
-        {Array.from({ length: 10 }, (_, index) => index + 1).map((number) => (
-          <Pressable
-            accessibilityRole="button"
-            key={number}
-            onPress={() => onChange(number)}
-            style={[styles.scaleButton, value === number && styles.scaleButtonSelected]}
-          >
-            <Text style={[styles.scaleText, value === number && styles.scaleTextSelected]}>{number}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function ReflectionInput({
-  label,
-  value,
-  onChangeText,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-}) {
-  return (
-    <View style={styles.reflectionInput}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        multiline
-        onChangeText={onChangeText}
-        placeholder="Optional"
-        placeholderTextColor={colors.muted}
-        style={styles.textArea}
-        value={value}
-      />
-    </View>
   );
 }
 
@@ -479,14 +398,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 16,
   },
-  reflection: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: spacing.lg,
-    padding: spacing.lg,
-  },
   sleepCard: {
     backgroundColor: colors.surface,
     borderColor: colors.softLine,
@@ -519,57 +430,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing.md,
   },
-  reflectionTitle: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  reflectionInput: {
-    gap: spacing.sm,
-  },
   inputLabel: {
     color: colors.ink,
     fontSize: 14,
     fontWeight: '800',
-  },
-  textArea: {
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.ink,
-    fontSize: 15,
-    minHeight: 72,
-    padding: spacing.md,
-    textAlignVertical: 'top',
-  },
-  scaleBlock: {
-    gap: spacing.sm,
-  },
-  scaleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  scaleButton: {
-    alignItems: 'center',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  scaleButtonSelected: {
-    backgroundColor: colors.blue,
-    borderColor: colors.blue,
-  },
-  scaleText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  scaleTextSelected: {
-    color: '#FFFFFF',
   },
   saveButton: {
     alignItems: 'center',
