@@ -32,7 +32,7 @@ export default function SettingsScreen() {
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
   const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
   const [exportText, setExportText] = useState('');
-  const [authMode, setAuthMode] = useState<'signIn' | 'create'>('signIn');
+  const [authMode, setAuthMode] = useState<'signIn' | 'create' | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -115,7 +115,7 @@ export default function SettingsScreen() {
 
       <View style={styles.cloudBox}>
         <View style={styles.cloudHeader}>
-          <Text style={styles.sectionTitle}>Supabase Sync</Text>
+          <Text style={styles.sectionTitle}>Account</Text>
           <Text style={styles.cloudStatus}>
             {cloudStatus.configured
               ? cloudStatus.signedIn
@@ -151,38 +151,40 @@ export default function SettingsScreen() {
           </View>
         ) : (
           <View style={styles.signInBox}>
-            <View style={styles.authModeRow}>
-              <ModeButton active={authMode === 'signIn'} label="Sign in" onPress={() => setAuthMode('signIn')} />
-              <ModeButton active={authMode === 'create'} label="Create account" onPress={() => setAuthMode('create')} />
-            </View>
-            {authMode === 'create' ? (
-              <TextInput
-                autoCapitalize="words"
-                onChangeText={setFullName}
-                placeholder="Name"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-                value={fullName}
-              />
-            ) : null}
-            <TextInput
-              autoCapitalize="none"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={colors.muted}
-              style={styles.input}
-              value={email}
-            />
-            <TextInput
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={colors.muted}
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
             <View style={styles.actions}>
+              <ActionButton disabled={busy} icon={<LogIn color={colors.ink} size={17} />} label="Sign in with Google" onPress={() => runCloudAction(signInWithGoogle, 'Redirecting to Google.')} />
+              <ActionButton disabled={busy} icon={<LogIn color={colors.ink} size={17} />} label="Sign in" onPress={() => setAuthMode('signIn')} />
+              <ActionButton disabled={busy} icon={<UserPlus color={colors.ink} size={17} />} label="Create new account" onPress={() => setAuthMode('create')} />
+            </View>
+            {authMode ? (
+              <View style={styles.authForm}>
+                {authMode === 'create' ? (
+                  <TextInput
+                    autoCapitalize="words"
+                    onChangeText={setFullName}
+                    placeholder="Name"
+                    placeholderTextColor={colors.muted}
+                    style={styles.input}
+                    value={fullName}
+                  />
+                ) : null}
+                <TextInput
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  onChangeText={setEmail}
+                  placeholder="Email"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                  value={email}
+                />
+                <TextInput
+                  onChangeText={setPassword}
+                  placeholder="Password"
+                  placeholderTextColor={colors.muted}
+                  secureTextEntry
+                  style={styles.input}
+                  value={password}
+                />
               <ActionButton
                 disabled={busy}
                 icon={authMode === 'signIn' ? <LogIn color={colors.ink} size={17} /> : <UserPlus color={colors.ink} size={17} />}
@@ -196,8 +198,8 @@ export default function SettingsScreen() {
                       )
                 }
               />
-              <ActionButton disabled={busy} icon={<LogIn color={colors.ink} size={17} />} label="Sign in with Google" onPress={() => runCloudAction(signInWithGoogle, 'Redirecting to Google.')} />
-            </View>
+              </View>
+            ) : null}
           </View>
         )}
       </View>
@@ -236,14 +238,6 @@ function ActionButton({
     <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.actionButton, disabled && styles.disabled]}>
       {icon}
       <Text style={styles.actionText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function ModeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.modeButton, active && styles.modeButtonActive]}>
-      <Text style={[styles.modeText, active && styles.modeTextActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -437,32 +431,8 @@ const styles = StyleSheet.create({
   signInBox: {
     gap: spacing.sm,
   },
-  authModeRow: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    padding: 3,
-  },
-  modeButton: {
-    alignItems: 'center',
-    borderRadius: 6,
-    flex: 1,
-    minHeight: 38,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  modeButtonActive: {
-    backgroundColor: colors.blue,
-  },
-  modeText: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  modeTextActive: {
-    color: '#FFFFFF',
+  authForm: {
+    gap: spacing.sm,
   },
   actionButton: {
     alignItems: 'center',
