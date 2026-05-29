@@ -61,7 +61,7 @@ export default function SettingsScreen() {
     setMessage(`Export ready: ${result.path}`);
   }
 
-  async function runCloudAction(action: () => Promise<string | void>, successMessage: string) {
+  async function runCloudAction(action: () => Promise<string | null | void>, successMessage: string) {
     setBusy(true);
     setMessage(null);
     try {
@@ -150,16 +150,7 @@ export default function SettingsScreen() {
                 disabled={busy}
                 icon={<LogIn color={colors.ink} size={17} />}
                 label="Sign in"
-                onPress={() =>
-                  runCloudAction(async () => {
-                    await signInToCloud(email, password);
-                    try {
-                      return await pullCloudDataToLocal();
-                    } catch {
-                      return;
-                    }
-                  }, 'Signed in and refreshed.')
-                }
+                onPress={() => runCloudAction(() => signInToCloud(email, password), 'Signed in and refreshed.')}
               />
               <ActionButton
                 disabled={busy}

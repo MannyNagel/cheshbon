@@ -36,6 +36,7 @@ export async function signInToCloud(email: string, password: string) {
   const client = requireSupabase();
   const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;
+  return pullCloudDataToLocalIfAvailable();
 }
 
 export async function signUpForCloud(email: string, password: string) {
@@ -53,11 +54,24 @@ export async function signOutOfCloud() {
 export async function pushLocalDataToCloud() {
   const client = requireSupabase();
   const user = await requireUser();
+  return pushLocalDataForUser(client, user.id);
+}
+
+export async function pushLocalDataToCloudIfSignedIn() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  const userId = data.session?.user.id;
+  if (!userId) return null;
+  return pushLocalDataForUser(supabase, userId);
+}
+
+async function pushLocalDataForUser(client: NonNullable<typeof supabase>, userId: string) {
   const snapshot = JSON.parse(await exportAllData());
   const now = new Date().toISOString();
   const { error } = await client.from('cloud_snapshots').upsert(
     {
-      user_id: user.id,
+      user_id: userId,
       snapshot,
       updated_at: now,
     },
@@ -70,13 +84,28 @@ export async function pushLocalDataToCloud() {
 export async function pullCloudDataToLocal() {
   const client = requireSupabase();
   const user = await requireUser();
+  const syncedAt = await pullCloudDataForUser(client, user.id);
+  if (!syncedAt) throw new Error('No cloud backup found for this account yet.');
+  return syncedAt;
+}
+
+export async function pullCloudDataToLocalIfAvailable() {
+  if (!isSupabaseConfigured || !supabase) return null;
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+  const userId = sessionData.session?.user.id;
+  if (!userId) return null;
+  return pullCloudDataForUser(supabase, userId);
+}
+
+async function pullCloudDataForUser(client: NonNullable<typeof supabase>, userId: string) {
   const { data, error } = await client
     .from('cloud_snapshots')
     .select('snapshot, updated_at')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
-  if (!data?.snapshot) throw new Error('No cloud backup found for this account yet.');
+  if (!data?.snapshot) return null;
   try {
     await importAllData(JSON.stringify(data.snapshot));
   } catch (importError) {

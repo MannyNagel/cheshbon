@@ -6,6 +6,7 @@ import { ReviewSection } from '@/src/components/ReviewSection';
 import { colors, spacing } from '@/src/components/ui';
 import type { Blocker, EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
 import { getActiveBlockers, getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
+import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getNightlyReviewItems } from '@/src/services/activeRoutineService';
 import { addDaysIso, dayName, dayOfMonth, monthDay, shortDayName, todayIsoDate } from '@/src/utils/dates';
 
@@ -67,7 +68,14 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
     setMessage(null);
     try {
       await saveNightlyReview(reviewDate, draft);
-      setMessage('Saved.');
+      let nextMessage = 'Saved.';
+      try {
+        const syncedAt = await pushLocalDataToCloudIfSignedIn();
+        if (syncedAt) nextMessage = 'Saved and pushed to cloud.';
+      } catch (syncError) {
+        nextMessage = syncError instanceof Error ? `Saved locally. Cloud push failed: ${syncError.message}` : 'Saved locally. Cloud push failed.';
+      }
+      setMessage(nextMessage);
       const range = getCalendarRange(reviewDate, calendarMode);
       const [nextSavedDates, nextStreak] = await Promise.all([
         getReviewStatusMap(range.start, range.end),
