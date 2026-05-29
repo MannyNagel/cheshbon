@@ -17,6 +17,7 @@ import {
   pullCloudDataToLocal,
   pullCloudDataToLocalIfAvailable,
   pushLocalDataToCloud,
+  pushLocalDataToCloudIfSignedIn,
   signInWithGoogle,
   signInToCloud,
   signOutOfCloud,
@@ -242,6 +243,16 @@ function ActionButton({
   );
 }
 
+async function syncedMessage(baseMessage: string) {
+  try {
+    const syncedAt = await pushLocalDataToCloudIfSignedIn();
+    return syncedAt ? `${baseMessage} Synced to cloud.` : baseMessage;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Cloud push failed.';
+    return `${baseMessage} Saved locally, but cloud push failed: ${detail}`;
+  }
+}
+
 function EditableDomains({
   rows,
   onReload,
@@ -280,7 +291,7 @@ function DomainEditor({
   async function save() {
     try {
       await updateDomain({ id: row.id, name, description, active: row.active === 1 });
-      setMessage('Domain updated.');
+      setMessage(await syncedMessage('Domain updated.'));
       await onReload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update domain.');
@@ -289,7 +300,7 @@ function DomainEditor({
   async function remove() {
     try {
       await deactivateDomain(row.id);
-      setMessage('Domain deleted.');
+      setMessage(await syncedMessage('Domain deleted.'));
       await onReload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not delete domain.');
@@ -346,7 +357,7 @@ function BlockerEditor({
   async function save() {
     try {
       await updateBlocker({ id: row.id, name, description, active });
-      setMessage('Blocker updated.');
+      setMessage(await syncedMessage('Blocker updated.'));
       await onReload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update blocker.');

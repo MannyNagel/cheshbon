@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 
 import { colors, spacing } from '@/src/components/ui';
 import { createTask, getTaskFormOptions, getTasksForManagement, removeTaskFromTodayForward, updateTask } from '@/src/repositories/cheshbonRepo';
+import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 
 type MetricKind = 'completed' | 'quality' | 'number' | 'text';
 type Options = {
@@ -176,10 +177,10 @@ export default function PracticesScreen() {
           metricId: editing.metricId,
           ...form,
         });
-        setMessage('Practice updated.');
+        setMessage(await syncedMessage('Practice updated.'));
       } else {
         await createTask(form);
-        setMessage('Practice added.');
+        setMessage(await syncedMessage('Practice added.'));
       }
       setMode('list');
       setEditing(null);
@@ -196,7 +197,7 @@ export default function PracticesScreen() {
     setMessage(null);
     try {
       await removeTaskFromTodayForward(task.routinePracticeId);
-      setMessage('Practice removed from today onward.');
+      setMessage(await syncedMessage('Practice removed from today onward.'));
       setMode('list');
       setEditing(null);
       await load();
@@ -299,6 +300,16 @@ export default function PracticesScreen() {
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </ScrollView>
   );
+}
+
+async function syncedMessage(baseMessage: string) {
+  try {
+    const syncedAt = await pushLocalDataToCloudIfSignedIn();
+    return syncedAt ? `${baseMessage} Synced to cloud.` : baseMessage;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Cloud push failed.';
+    return `${baseMessage} Saved locally, but cloud push failed: ${detail}`;
+  }
 }
 
 function TaskForm({

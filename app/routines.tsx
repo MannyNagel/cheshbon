@@ -17,6 +17,7 @@ import {
   updateScheduleDays,
 } from '@/src/repositories/cheshbonRepo';
 import { getActiveRoutinesForDate } from '@/src/services/activeRoutineService';
+import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { todayIsoDate } from '@/src/utils/dates';
 
 const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Shabbos'];
@@ -99,12 +100,12 @@ export default function RoutinesScreen() {
       await load();
       const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
       setEditingRoutine(routine);
-      setMessage('Routine created. Add practices below or add more date ranges.');
+      setMessage(await syncedMessage('Routine created. Add practices below or add more date ranges.'));
       return;
     }
     if (editingRoutine) {
       await updateRoutine({ id: editingRoutine.id, ...form });
-      setMessage('Routine updated.');
+      setMessage(await syncedMessage('Routine updated.'));
       await load();
       const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === editingRoutine.id) ?? null;
       setEditingRoutine(routine);
@@ -116,7 +117,7 @@ export default function RoutinesScreen() {
     if (!routineId) return;
     await addRoutineSchedule({ routineId, ...newSchedule });
     setNewSchedule(emptySchedule);
-    setMessage('Date range added.');
+    setMessage(await syncedMessage('Date range added.'));
     await load();
     const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
     setEditingRoutine(routine);
@@ -125,6 +126,7 @@ export default function RoutinesScreen() {
   async function toggleDay(scheduleId: string, days: number[], day: number) {
     const next = days.includes(day) ? days.filter((value) => value !== day) : [...days, day].sort();
     await updateScheduleDays(scheduleId, next);
+    setMessage(await syncedMessage('Schedule updated.'));
     await load();
     if (editingRoutine) {
       setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editingRoutine.id) ?? null);
@@ -157,7 +159,7 @@ export default function RoutinesScreen() {
       await deleteRoutine(routineId);
       setMode('list');
       setExpandedRoutineId(null);
-      setMessage('Routine deleted.');
+      setMessage(await syncedMessage('Routine deleted.'));
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not delete routine.');
@@ -202,6 +204,7 @@ export default function RoutinesScreen() {
                 onEdit={startEdit}
                 onToggleActive={async () => {
                   await toggleRoutineActive(routine.id, !routine.active);
+                  setMessage(await syncedMessage('Routine updated.'));
                   await load();
                 }}
                 onToggleOpen={toggleRoutineOpen}
@@ -223,6 +226,7 @@ export default function RoutinesScreen() {
                       onEdit={startEdit}
                       onToggleActive={async () => {
                         await toggleRoutineActive(routine.id, !routine.active);
+                        setMessage(await syncedMessage('Routine updated.'));
                         await load();
                       }}
                       onToggleOpen={toggleRoutineOpen}
@@ -270,6 +274,7 @@ export default function RoutinesScreen() {
                         defaultValue={schedule.startDate ?? ''}
                         onEndEditing={async (event) => {
                           await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
+                          setMessage(await syncedMessage('Date range updated.'));
                           await load();
                           setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
                         }}
@@ -281,6 +286,7 @@ export default function RoutinesScreen() {
                         defaultValue={schedule.endDate ?? ''}
                         onEndEditing={async (event) => {
                           await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
+                          setMessage(await syncedMessage('Date range updated.'));
                           await load();
                           setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
                         }}
@@ -295,6 +301,7 @@ export default function RoutinesScreen() {
                       label="Remove range"
                       onPress={async () => {
                         await deleteRoutineSchedule(schedule.id);
+                        setMessage(await syncedMessage('Date range removed.'));
                         await load();
                         setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
                       }}
@@ -325,6 +332,16 @@ export default function RoutinesScreen() {
       )}
     </ScrollView>
   );
+}
+
+async function syncedMessage(baseMessage: string) {
+  try {
+    const syncedAt = await pushLocalDataToCloudIfSignedIn();
+    return syncedAt ? `${baseMessage} Synced to cloud.` : baseMessage;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Cloud push failed.';
+    return `${baseMessage} Saved locally, but cloud push failed: ${detail}`;
+  }
 }
 
 function RoutineCard({
