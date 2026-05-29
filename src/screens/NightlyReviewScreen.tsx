@@ -1,5 +1,6 @@
 import { CalendarDays, Save, SkipBack, SkipForward } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ReviewSection } from '@/src/components/ReviewSection';
@@ -46,12 +47,14 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
     setStreak(nextStreak);
   }, [calendarMode, reviewDate]);
 
-  useEffect(() => {
-    load().catch((error) => {
-      setMessage(error instanceof Error ? error.message : 'Could not load review');
-      setLoading(false);
-    });
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load().catch((error) => {
+        setMessage(error instanceof Error ? error.message : 'Could not load review');
+        setLoading(false);
+      });
+    }, [load]),
+  );
 
   function updateEntry(entry: EntryDraft) {
     setDraft((current) => ({
