@@ -51,8 +51,8 @@ export default function RoutinesScreen() {
     const activeRoutineIds = active.map((routine) => routine.id);
     setData(
       routineRows.sort((a, b) => {
-        const aActive = activeRoutineIds.includes(a.id) ? 0 : 1;
-        const bActive = activeRoutineIds.includes(b.id) ? 0 : 1;
+        const aActive = a.active ? 0 : 1;
+        const bActive = b.active ? 0 : 1;
         return aActive - bActive || a.priority - b.priority || a.name.localeCompare(b.name);
       }),
     );
@@ -196,7 +196,7 @@ export default function RoutinesScreen() {
           <ActivityIndicator color={colors.blue} />
         ) : (
           <>
-            {data.filter((routine) => activeIds.includes(routine.id)).map((routine) => (
+            {data.filter((routine) => routine.active).map((routine) => (
               <RoutineCard
                 activeIds={activeIds}
                 expandedRoutineId={expandedRoutineId}
@@ -214,11 +214,11 @@ export default function RoutinesScreen() {
             ))}
             <View style={styles.inactiveSection}>
               <Pressable accessibilityRole="button" onPress={() => setInactiveOpen((value) => !value)} style={styles.inactiveHeader}>
-                <Text style={styles.inactiveTitle}>Inactive routines ({data.filter((routine) => !activeIds.includes(routine.id)).length})</Text>
+                <Text style={styles.inactiveTitle}>Inactive routines ({data.filter((routine) => !routine.active).length})</Text>
                 {inactiveOpen ? <ChevronUp color={colors.ink} size={18} /> : <ChevronDown color={colors.ink} size={18} />}
               </Pressable>
               {inactiveOpen
-                ? data.filter((routine) => !activeIds.includes(routine.id)).map((routine) => (
+                ? data.filter((routine) => !routine.active).map((routine) => (
                     <RoutineCard
                       activeIds={activeIds}
                       expandedRoutineId={expandedRoutineId}
@@ -368,7 +368,7 @@ function RoutineCard({
         <Pressable accessibilityRole="button" onPress={() => onToggleOpen(routine.id)} style={styles.cardTitleBlock}>
           <Text style={styles.cardTitle}>{routine.name}</Text>
           <Text style={styles.cardMeta}>
-            {activeIds.includes(routine.id) ? 'Active for date' : 'Inactive for date'} | {routine.routineType}
+            {activeIds.includes(routine.id) ? 'Applies on selected date' : 'Does not apply on selected date'} | {routine.routineType}
           </Text>
         </Pressable>
         <IconButton label="Edit routine" onPress={() => onEdit(routine)}>
