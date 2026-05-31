@@ -30,6 +30,96 @@ type MetricRow = {
 };
 type MetricOptionRow = { id: string; metric_id: string; label: string; value: string; sort_order: number };
 
+export type HomeSummary = {
+  reviewComplete: boolean;
+  streak: number;
+  reviewedPractices: number;
+  notesAdded: number;
+  patternsWorthNoticing: number;
+  workOnToday: string | null;
+  workOnThisWeek: string | null;
+  recentGratitude: Array<{ date: string; text: string }>;
+};
+
+export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeSummary> {
+  const db = await getDb();
+  const yesterday = addDaysIso(reviewDate, -1);
+  const sevenDaysAgo = addDaysIso(reviewDate, -6);
+
+  const session = await db.getFirstAsync<{ id: string; note: string | null; pattern_noticed: string | null }>(
+    'SELECT id, note, pattern_noticed FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
+    LOCAL_USER_ID,
+    reviewDate,
+  );
+  const yesterdaySession = await db.getFirstAsync<{ adjustment_for_tomorrow: string | null }>(
+    'SELECT adjustment_for_tomorrow FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
+    LOCAL_USER_ID,
+    yesterday,
+  );
+  const latestWeekly = await db.getFirstAsync<{ one_kabbalah: string | null; what_needs_work: string | null }>(
+    `SELECT one_kabbalah, what_needs_work
+     FROM weekly_reviews
+     WHERE user_id = ?
+      AND week_start_date <= ?
+     ORDER BY week_start_date DESC
+     LIMIT 1`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
+
+  const reviewed = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM daily_entries WHERE user_id = ? AND entry_date = ?',
+    LOCAL_USER_ID,
+    reviewDate,
+  );
+  const entryNotes = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count
+     FROM daily_entries
+     WHERE user_id = ?
+      AND entry_date = ?
+      AND note IS NOT NULL
+      AND TRIM(note) != ''`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
+  const blockerPatterns = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(DISTINCT eb.blocker_id) as count
+     FROM entry_blockers eb
+     JOIN daily_entries de ON de.id = eb.entry_id
+     WHERE de.user_id = ?
+      AND de.entry_date = ?`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
+  const recentGratitude = await db.getAllAsync<{ review_date: string; main_win: string }>(
+    `SELECT review_date, main_win
+     FROM daily_review_sessions
+     WHERE user_id = ?
+      AND review_date >= ?
+      AND review_date <= ?
+      AND main_win IS NOT NULL
+      AND TRIM(main_win) != ''
+     ORDER BY review_date DESC
+     LIMIT 5`,
+    LOCAL_USER_ID,
+    sevenDaysAgo,
+    reviewDate,
+  );
+
+  const sessionNotes = [session?.note, session?.pattern_noticed].filter((value) => value?.trim()).length;
+
+  return {
+    reviewComplete: Boolean(session),
+    streak: await getCurrentReviewStreak(),
+    reviewedPractices: reviewed?.count ?? 0,
+    notesAdded: (entryNotes?.count ?? 0) + sessionNotes,
+    patternsWorthNoticing: (blockerPatterns?.count ?? 0) + (session?.pattern_noticed?.trim() ? 1 : 0),
+    workOnToday: yesterdaySession?.adjustment_for_tomorrow?.trim() || null,
+    workOnThisWeek: latestWeekly?.one_kabbalah?.trim() || latestWeekly?.what_needs_work?.trim() || null,
+    recentGratitude: recentGratitude.map((row) => ({ date: row.review_date, text: row.main_win })),
+  };
+}
+
 export async function getActiveBlockers(): Promise<Blocker[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<BlockerRow>(

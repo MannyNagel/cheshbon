@@ -38,7 +38,7 @@ export default function RootLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Review',
+            title: 'Today',
             tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} />,
           }}
         />
