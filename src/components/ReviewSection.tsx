@@ -45,7 +45,8 @@ function groupOverviewItems(items: NightlySection['items']) {
     { title: 'Health', rank: 1, items: [] as NightlySection['items'] },
     { title: 'Spiritual', rank: 2, items: [] as NightlySection['items'] },
     { title: 'Middos', rank: 3, items: [] as NightlySection['items'] },
-    { title: 'Other', rank: 4, items: [] as NightlySection['items'] },
+    { title: 'Current Avodah', rank: 4, items: [] as NightlySection['items'] },
+    { title: 'Other', rank: 5, items: [] as NightlySection['items'] },
   ];
   for (const item of items) {
     groups[overviewGroupIndex(item.domainId, item.practiceName)].items.push(item);
@@ -63,7 +64,8 @@ function overviewGroupIndex(domainId: string, practiceName: string) {
   if (domainId === 'domain_health' || name.includes('phone') || name.includes('computer')) return 0;
   if (domainId === 'domain_tefillah_brachot') return 1;
   if (domainId === 'domain_middos') return 2;
-  return 3;
+  if (domainId === 'domain_current_avodah') return 3;
+  return 4;
 }
 
 function overviewItemRank(item: NightlySection['items'][number]) {
@@ -74,6 +76,7 @@ function overviewItemRank(item: NightlySection['items'][number]) {
   if (name.includes('positivity')) return 210;
   if (name.includes('complimentary')) return 220;
   if (name.includes('gratitude')) return 230;
+  if (name.includes('avodah')) return 310;
   return item.sortOrder;
 }
 

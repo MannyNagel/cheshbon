@@ -9,6 +9,7 @@ export const domains = [
   ['domain_chaveiro', "Bein Adam L'chaveiro", 'Interpersonal obligations and presence'],
   ['domain_family', 'Marriage / Family', 'Home, family, and close relationships'],
   ['domain_foundations', 'Morning & Night Foundations', 'Anchors at the edges of the day'],
+  ['domain_current_avodah', 'Current Avodah', 'The present point of growth for today and this week'],
   ['domain_seasonal', 'Seasonal Avodah', 'Avodah that changes by calendar and context'],
 ] as const;
 export const reviewSections = [
@@ -166,6 +167,24 @@ export const practices: PracticeSeed[] = [
     ],
   },
   {
+    id: 'practice_daily_avodah',
+    domainId: 'domain_current_avodah',
+    name: "Tomorrow's avodah",
+    description: 'Choose one thing to work on tomorrow.',
+    metrics: [
+      { id: 'metric_daily_avodah_text', name: 'Current avodah', metricType: 'text' },
+    ],
+  },
+  {
+    id: 'practice_weekly_avodah',
+    domainId: 'domain_current_avodah',
+    name: 'Weekly avodah',
+    description: 'Choose one thing to work on this week.',
+    metrics: [
+      { id: 'metric_weekly_avodah_text', name: 'Current avodah', metricType: 'text' },
+    ],
+  },
+  {
     id: 'practice_shema_al_hamitah',
     domainId: 'domain_tefillah_brachot',
     name: 'Kriat Shema al hamitah',
@@ -232,6 +251,8 @@ export const routinePractices = [
   ['rp_positivity', 'routine_core', 'practice_positivity', 'section_overall', 210, 0, null, null],
   ['rp_complimentary', 'routine_core', 'practice_complimentary', 'section_overall', 220, 0, null, null],
   ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 230, 0, null, null],
+  ['rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0, null, null],
+  ['rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0, null, null],
   ['rp_morning_seder', 'routine_yeshiva_zman', 'practice_morning_seder', 'section_morning', 50, 1, null, null],
   ['rp_shiur', 'routine_yeshiva_zman', 'practice_shiur', 'section_afternoon', 20, 1, null, null],
   ['rp_afternoon_seder', 'routine_yeshiva_zman', 'practice_afternoon_seder', 'section_afternoon', 30, 1, null, null],

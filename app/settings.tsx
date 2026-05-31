@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -6,6 +6,8 @@ import { colors, spacing } from '@/src/components/ui';
 import {
   deactivateDomain,
   exportAllData,
+  createBlocker,
+  createDomain,
   getBlockerEditorRows,
   getDomainEditorRows,
   shareExportJson,
@@ -268,11 +270,48 @@ function EditableDomains({
       <DisclosureHeader open={open} title="Domains" onPress={() => setOpen((value) => !value)} />
       {open ? (
         <View style={styles.list}>
+          <NewDomainEditor onReload={onReload} setMessage={setMessage} />
           {rows.map((row) => (
             <DomainEditor key={row.id} row={row} onReload={onReload} setMessage={setMessage} />
           ))}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function NewDomainEditor({
+  onReload,
+  setMessage,
+}: {
+  onReload: () => Promise<void>;
+  setMessage: (message: string | null) => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  async function add() {
+    if (!name.trim()) {
+      setMessage('Domain name is required.');
+      return;
+    }
+    try {
+      await createDomain({ name, description });
+      setName('');
+      setDescription('');
+      setMessage(await syncedMessage('Domain added.'));
+      await onReload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add domain.');
+    }
+  }
+  return (
+    <View style={[styles.editorRow, styles.newEditorRow]}>
+      <Text style={styles.smallTitle}>Add domain</Text>
+      <TextInput onChangeText={setName} placeholder="Domain name" placeholderTextColor={colors.muted} style={styles.input} value={name} />
+      <TextInput onChangeText={setDescription} placeholder="Description" placeholderTextColor={colors.muted} style={styles.input} value={description} />
+      <View style={styles.actions}>
+        <ActionButton icon={<Plus color={colors.ink} size={17} />} label="Add domain" onPress={add} />
+      </View>
     </View>
   );
 }
@@ -333,11 +372,48 @@ function EditableBlockers({
       <DisclosureHeader open={open} title="Blockers" onPress={() => setOpen((value) => !value)} />
       {open ? (
         <View style={styles.list}>
+          <NewBlockerEditor onReload={onReload} setMessage={setMessage} />
           {rows.map((row) => (
             <BlockerEditor key={row.id} row={row} onReload={onReload} setMessage={setMessage} />
           ))}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+function NewBlockerEditor({
+  onReload,
+  setMessage,
+}: {
+  onReload: () => Promise<void>;
+  setMessage: (message: string | null) => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  async function add() {
+    if (!name.trim()) {
+      setMessage('Blocker name is required.');
+      return;
+    }
+    try {
+      await createBlocker({ name, description });
+      setName('');
+      setDescription('');
+      setMessage(await syncedMessage('Blocker added.'));
+      await onReload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add blocker.');
+    }
+  }
+  return (
+    <View style={[styles.editorRow, styles.newEditorRow]}>
+      <Text style={styles.smallTitle}>Add blocker</Text>
+      <TextInput onChangeText={setName} placeholder="Blocker name" placeholderTextColor={colors.muted} style={styles.input} value={name} />
+      <TextInput onChangeText={setDescription} placeholder="Description" placeholderTextColor={colors.muted} style={styles.input} value={description} />
+      <View style={styles.actions}>
+        <ActionButton icon={<Plus color={colors.ink} size={17} />} label="Add blocker" onPress={add} />
+      </View>
     </View>
   );
 }
@@ -508,6 +584,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: spacing.sm,
     padding: spacing.md,
+  },
+  newEditorRow: {
+    backgroundColor: colors.paper,
+  },
+  smallTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
   },
   disclosureHeader: {
     alignItems: 'center',

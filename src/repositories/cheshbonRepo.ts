@@ -14,7 +14,7 @@ import type {
   NightlyReviewDraft,
   RoutineTemplate,
 } from '@/src/models/types';
-import { addDaysIso, todayIsoDate } from '@/src/utils/dates';
+import { addDaysIso, dayOfWeek, todayIsoDate } from '@/src/utils/dates';
 import { makeId } from '@/src/utils/ids';
 
 type BlockerRow = { id: string; name: string; description: string | null; active: number };
@@ -36,16 +36,12 @@ export type HomeSummary = {
   reviewComplete: boolean;
   streak: number;
   reviewedPractices: number;
-  notesAdded: number;
-  patternsWorthNoticing: number;
-  workOnToday: string | null;
-  workOnThisWeek: string | null;
+  currentAvodah: Array<{ practiceId: string; practiceName: string; date: string; text: string }>;
   recentGratitude: Array<{ date: string; text: string }>;
 };
 
 export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeSummary> {
   const db = await getDb();
-  const yesterday = addDaysIso(reviewDate, -1);
   const sevenDaysAgo = addDaysIso(reviewDate, -6);
 
   const session = await db.getFirstAsync<{ id: string; note: string | null; pattern_noticed: string | null; completed_at: string | null }>(
@@ -53,45 +49,9 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     LOCAL_USER_ID,
     reviewDate,
   );
-  const yesterdaySession = await db.getFirstAsync<{ adjustment_for_tomorrow: string | null }>(
-    'SELECT adjustment_for_tomorrow FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
-    LOCAL_USER_ID,
-    yesterday,
-  );
-  const latestWeekly = await db.getFirstAsync<{ one_kabbalah: string | null; what_needs_work: string | null }>(
-    `SELECT one_kabbalah, what_needs_work
-     FROM weekly_reviews
-     WHERE user_id = ?
-      AND week_start_date <= ?
-     ORDER BY week_start_date DESC
-     LIMIT 1`,
-    LOCAL_USER_ID,
-    reviewDate,
-  );
-
   const reviewed = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM daily_entries WHERE user_id = ? AND entry_date = ?',
+    'SELECT COUNT(*) as count FROM daily_entries WHERE user_id = ?',
     LOCAL_USER_ID,
-    reviewDate,
-  );
-  const entryNotes = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count
-     FROM daily_entries
-     WHERE user_id = ?
-      AND entry_date = ?
-      AND note IS NOT NULL
-      AND TRIM(note) != ''`,
-    LOCAL_USER_ID,
-    reviewDate,
-  );
-  const blockerPatterns = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(DISTINCT eb.blocker_id) as count
-     FROM entry_blockers eb
-     JOIN daily_entries de ON de.id = eb.entry_id
-     WHERE de.user_id = ?
-      AND de.entry_date = ?`,
-    LOCAL_USER_ID,
-    reviewDate,
   );
   const recentGratitude = await db.getAllAsync<{ entry_date: string; gratitude_text: string }>(
     `SELECT de.entry_date,
@@ -115,19 +75,59 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     reviewDate,
   );
 
-  const sessionNotes = [session?.note, session?.pattern_noticed].filter((value) => value?.trim()).length;
-
   return {
     reviewStarted: Boolean(session),
     reviewComplete: Boolean(session?.completed_at),
     streak: await getCurrentReviewStreak(),
     reviewedPractices: reviewed?.count ?? 0,
-    notesAdded: (entryNotes?.count ?? 0) + sessionNotes,
-    patternsWorthNoticing: (blockerPatterns?.count ?? 0) + (session?.pattern_noticed?.trim() ? 1 : 0),
-    workOnToday: yesterdaySession?.adjustment_for_tomorrow?.trim() || null,
-    workOnThisWeek: latestWeekly?.one_kabbalah?.trim() || latestWeekly?.what_needs_work?.trim() || null,
+    currentAvodah: await getCurrentAvodahSummary(db, reviewDate),
     recentGratitude: recentGratitude.map((row) => ({ date: row.entry_date, text: row.gratitude_text })),
   };
+}
+
+async function getCurrentAvodahSummary(db: Awaited<ReturnType<typeof getDb>>, reviewDate: string) {
+  const yesterday = addDaysIso(reviewDate, -1);
+  const lastShabbos = lastShabbosOnOrBefore(reviewDate);
+  const practices = await db.getAllAsync<{ id: string; name: string }>(
+    `SELECT p.id, p.name
+     FROM practices p
+     JOIN domains d ON d.id = p.domain_id
+     WHERE p.active = 1
+      AND d.active = 1
+      AND d.id = 'domain_current_avodah'
+     ORDER BY p.name`,
+  );
+  const rows: Array<{ practiceId: string; practiceName: string; date: string; text: string }> = [];
+  for (const practice of practices) {
+    const lowerName = practice.name.toLowerCase();
+    const targetDate = lowerName.includes('week') || lowerName.includes('shabbos') ? lastShabbos : yesterday;
+    const value = await db.getFirstAsync<{ text: string | null }>(
+      `SELECT COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as text
+       FROM daily_entries de
+       LEFT JOIN metrics m ON m.practice_id = de.practice_id
+        AND m.metric_type = 'text'
+        AND m.active = 1
+       LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+        AND emv.metric_id = m.id
+       WHERE de.user_id = ?
+        AND de.practice_id = ?
+        AND de.entry_date = ?
+        AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+       LIMIT 1`,
+      LOCAL_USER_ID,
+      practice.id,
+      targetDate,
+    );
+    if (value?.text?.trim()) {
+      rows.push({ practiceId: practice.id, practiceName: practice.name, date: targetDate, text: value.text.trim() });
+    }
+  }
+  return rows;
+}
+
+function lastShabbosOnOrBefore(date: string) {
+  const delta = (dayOfWeek(date) - 6 + 7) % 7;
+  return addDaysIso(date, -delta);
 }
 
 export async function getActiveBlockers(): Promise<Blocker[]> {
@@ -916,6 +916,21 @@ export async function updateDomain(input: { id: string; name: string; descriptio
   );
 }
 
+export async function createDomain(input: { name: string; description?: string | null }) {
+  const db = await getDb();
+  const maxSort = await db.getFirstAsync<{ max_sort: number | null }>('SELECT MAX(sort_order) as max_sort FROM domains');
+  const id = makeId('domain');
+  await db.runAsync(
+    'INSERT INTO domains (id, user_id, name, description, sort_order, active) VALUES (?, ?, ?, ?, ?, 1)',
+    id,
+    LOCAL_USER_ID,
+    input.name.trim(),
+    input.description?.trim() || null,
+    (maxSort?.max_sort ?? 0) + 10,
+  );
+  return id;
+}
+
 export async function deactivateDomain(domainId: string) {
   const db = await getDb();
   const inUse = await db.getFirstAsync<{ count: number }>(
@@ -944,6 +959,37 @@ export async function updateBlocker(input: { id: string; name: string; descripti
     input.active ? 1 : 0,
     input.id,
   );
+}
+
+export async function createBlocker(input: { name: string; description?: string | null }) {
+  const db = await getDb();
+  const id = makeId('blocker');
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT INTO blockers (id, user_id, name, description, active) VALUES (?, ?, ?, ?, 1)',
+      id,
+      LOCAL_USER_ID,
+      input.name.trim(),
+      input.description?.trim() || null,
+    );
+    const practices = await db.getAllAsync<{ id: string }>('SELECT id FROM practices WHERE active = 1');
+    for (const practice of practices) {
+      await db.runAsync(
+        'INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled) VALUES (?, ?, 1)',
+        practice.id,
+        id,
+      );
+    }
+    await db.runAsync(
+      `UPDATE practice_blockers
+       SET enabled = 0,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE blocker_id = ?
+        AND practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah')`,
+      id,
+    );
+  });
+  return id;
 }
 
 async function getNextTaskSortOrder(

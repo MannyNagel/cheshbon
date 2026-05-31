@@ -1,15 +1,17 @@
-import { CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
+import { CalendarDays, CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import { getHomeSummary, type HomeSummary } from '@/src/repositories/cheshbonRepo';
-import { dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
+import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 
 export default function HomeScreen() {
   const today = todayIsoDate();
+  const yesterday = addDaysIso(today, -1);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [reviewDate, setReviewDate] = useState(yesterday);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -87,24 +89,53 @@ export default function HomeScreen() {
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statValue}>{summary.reviewedPractices}</Text>
-          <Text style={styles.statLabel}>practices reviewed</Text>
-        </View>
-      </View>
-
-      <View style={styles.activityPanel}>
-        <Text style={styles.sectionTitle}>Today&apos;s reflection</Text>
-        <View style={styles.activityRows}>
-          <ActivityLine value={summary.reviewedPractices} label="practices reviewed" />
-          <ActivityLine value={summary.notesAdded} label="notes added" />
-          <ActivityLine value={summary.patternsWorthNoticing} label="patterns worth noticing" />
+          <Text style={styles.statLabel}>all-time practices reviewed</Text>
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Current goals</Text>
-        <GoalCard title="What I wanted to work on today" text={summary.workOnToday} empty="No focus from yesterday yet." />
-        <GoalCard title="What I wanted to work on this week" text={summary.workOnThisWeek} empty="No weekly focus saved yet." />
+        <Text style={styles.sectionTitle}>Past daily reviews</Text>
+        <View style={styles.reviewPicker}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push(`/review/${yesterday}`)}
+            style={styles.secondaryButton}
+          >
+            <CalendarDays color={colors.ink} size={17} />
+            <Text style={styles.secondaryButtonText}>Yesterday</Text>
+          </Pressable>
+          <View style={styles.dateJump}>
+            <TextInput
+              onChangeText={setReviewDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.muted}
+              style={styles.dateInput}
+              value={reviewDate}
+            />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(`/review/${reviewDate.trim() || yesterday}`)}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>Open date</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
+
+      {summary.currentAvodah.length ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Current Avodah</Text>
+          {summary.currentAvodah.map((item) => (
+            <GoalCard
+              key={`${item.practiceId}-${item.date}`}
+              title={`${item.practiceName} · ${monthDay(item.date)}`}
+              text={item.text}
+              empty=""
+            />
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>What I have been grateful for recently</Text>
@@ -123,15 +154,6 @@ export default function HomeScreen() {
         )}
       </View>
     </ScrollView>
-  );
-}
-
-function ActivityLine({ value, label }: { value: number; label: string }) {
-  return (
-    <View style={styles.activityLine}>
-      <Text style={styles.activityValue}>{value}</Text>
-      <Text style={styles.activityLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -168,39 +190,6 @@ function formatEnglishDate(date: string) {
 }
 
 const styles = StyleSheet.create({
-  activityLabel: {
-    color: colors.muted,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'left',
-  },
-  activityLine: {
-    alignItems: 'center',
-    borderTopColor: colors.softLine,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  activityPanel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: spacing.sm,
-    padding: spacing.lg,
-  },
-  activityRows: {
-    gap: 0,
-  },
-  activityValue: {
-    color: colors.ink,
-    fontSize: 20,
-    fontWeight: '900',
-    minWidth: 34,
-    textAlign: 'left',
-  },
   center: {
     alignItems: 'center',
     backgroundColor: colors.paper,
@@ -330,6 +319,50 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
+    textAlign: 'left',
+  },
+  dateInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 44,
+    minWidth: 150,
+    paddingHorizontal: spacing.md,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  dateJump: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    minWidth: 220,
+  },
+  reviewPicker: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  secondaryButtonText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
     textAlign: 'left',
   },
   section: {

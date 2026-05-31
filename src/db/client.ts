@@ -262,10 +262,68 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync('UPDATE routine_practices SET required = 0');
     await db.runAsync('UPDATE metrics SET required = 0');
     await db.runAsync('UPDATE practices SET allow_note = 1 WHERE allow_note IS NULL');
-    await db.runAsync("UPDATE practices SET allow_note = 0 WHERE id = 'practice_gratitude'");
+    await db.runAsync("UPDATE practices SET allow_note = 0 WHERE id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah')");
     await db.runAsync(
       `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
-       SELECT 'practice_gratitude', id, 0
+       SELECT practice_id, blocker_id, 0
+       FROM (
+        SELECT 'practice_gratitude' as practice_id, id as blocker_id FROM blockers WHERE active = 1
+        UNION ALL
+        SELECT 'practice_daily_avodah' as practice_id, id as blocker_id FROM blockers WHERE active = 1
+        UNION ALL
+        SELECT 'practice_weekly_avodah' as practice_id, id as blocker_id FROM blockers WHERE active = 1
+       )`,
+    );
+    await db.runAsync(
+      `UPDATE practice_blockers
+       SET enabled = 0,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah')`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO domains (id, user_id, name, description, sort_order)
+       VALUES ('domain_current_avodah', ?, 'Current Avodah', 'The present point of growth for today and this week', 8)`,
+      LOCAL_USER_ID,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note)
+       VALUES ('practice_daily_avodah', ?, 'domain_current_avodah', 'Tomorrow''s avodah', 'Choose one thing to work on tomorrow.', 0)`,
+      LOCAL_USER_ID,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO metrics
+        (id, practice_id, name, metric_type, sort_order)
+       VALUES ('metric_daily_avodah_text', 'practice_daily_avodah', 'Current avodah', 'text', 1)`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO routine_practices
+        (id, routine_template_id, practice_id, review_section_id, sort_order, required)
+       VALUES ('rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0)`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note)
+       VALUES ('practice_weekly_avodah', ?, 'domain_current_avodah', 'Weekly avodah', 'Choose one thing to work on this week.', 0)`,
+      LOCAL_USER_ID,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO metrics
+        (id, practice_id, name, metric_type, sort_order)
+       VALUES ('metric_weekly_avodah_text', 'practice_weekly_avodah', 'Current avodah', 'text', 1)`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO routine_practices
+        (id, routine_template_id, practice_id, review_section_id, sort_order, required)
+       VALUES ('rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0)`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+       SELECT 'practice_daily_avodah', id, 0
+       FROM blockers
+       WHERE active = 1`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+       SELECT 'practice_weekly_avodah', id, 0
        FROM blockers
        WHERE active = 1`,
     );
