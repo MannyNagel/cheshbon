@@ -73,6 +73,7 @@ function overviewItemRank(item: NightlySection['items'][number]) {
   if (name.includes('brachot')) return 110;
   if (name.includes('positivity')) return 210;
   if (name.includes('complimentary')) return 220;
+  if (name.includes('gratitude')) return 230;
   return item.sortOrder;
 }
 

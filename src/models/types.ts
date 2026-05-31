@@ -112,6 +112,7 @@ export type ReviewSessionDraft = {
   patternNoticed?: string | null;
   adjustmentForTomorrow?: string | null;
   note?: string | null;
+  completedAt?: string | null;
 };
 
 export type NightlyReviewDraft = {

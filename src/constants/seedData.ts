@@ -157,6 +157,15 @@ export const practices: PracticeSeed[] = [
     ],
   },
   {
+    id: 'practice_gratitude',
+    domainId: 'domain_middos',
+    name: 'Gratitude',
+    description: 'Name something you are grateful for from the day.',
+    metrics: [
+      { id: 'metric_gratitude_text', name: 'Gratitude', metricType: 'text' },
+    ],
+  },
+  {
     id: 'practice_shema_al_hamitah',
     domainId: 'domain_tefillah_brachot',
     name: 'Kriat Shema al hamitah',
@@ -222,6 +231,7 @@ export const routinePractices = [
   ['rp_brachot', 'routine_core', 'practice_brachot', 'section_overall', 110, 1, null, 'Said brachot with kavannah and remembered after-brachot.'],
   ['rp_positivity', 'routine_core', 'practice_positivity', 'section_overall', 210, 0, null, null],
   ['rp_complimentary', 'routine_core', 'practice_complimentary', 'section_overall', 220, 0, null, null],
+  ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 230, 0, null, null],
   ['rp_morning_seder', 'routine_yeshiva_zman', 'practice_morning_seder', 'section_morning', 50, 1, null, null],
   ['rp_shiur', 'routine_yeshiva_zman', 'practice_shiur', 'section_afternoon', 20, 1, null, null],
   ['rp_afternoon_seder', 'routine_yeshiva_zman', 'practice_afternoon_seder', 'section_afternoon', 30, 1, null, null],

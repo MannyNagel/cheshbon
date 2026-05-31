@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import { getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
+import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 import type {
   Blocker,
   EntryDraft,
@@ -31,6 +32,7 @@ type MetricRow = {
 type MetricOptionRow = { id: string; metric_id: string; label: string; value: string; sort_order: number };
 
 export type HomeSummary = {
+  reviewStarted: boolean;
   reviewComplete: boolean;
   streak: number;
   reviewedPractices: number;
@@ -46,8 +48,8 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
   const yesterday = addDaysIso(reviewDate, -1);
   const sevenDaysAgo = addDaysIso(reviewDate, -6);
 
-  const session = await db.getFirstAsync<{ id: string; note: string | null; pattern_noticed: string | null }>(
-    'SELECT id, note, pattern_noticed FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
+  const session = await db.getFirstAsync<{ id: string; note: string | null; pattern_noticed: string | null; completed_at: string | null }>(
+    'SELECT id, note, pattern_noticed, completed_at FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
     LOCAL_USER_ID,
     reviewDate,
   );
@@ -91,15 +93,22 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     LOCAL_USER_ID,
     reviewDate,
   );
-  const recentGratitude = await db.getAllAsync<{ review_date: string; main_win: string }>(
-    `SELECT review_date, main_win
-     FROM daily_review_sessions
-     WHERE user_id = ?
-      AND review_date >= ?
-      AND review_date <= ?
-      AND main_win IS NOT NULL
-      AND TRIM(main_win) != ''
-     ORDER BY review_date DESC
+  const recentGratitude = await db.getAllAsync<{ entry_date: string; gratitude_text: string }>(
+    `SELECT de.entry_date,
+      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as gratitude_text
+     FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
+     LEFT JOIN metrics m ON m.practice_id = p.id
+      AND m.metric_type = 'text'
+      AND m.active = 1
+     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.metric_id = m.id
+     WHERE de.user_id = ?
+      AND de.entry_date >= ?
+      AND de.entry_date <= ?
+      AND (p.id = 'practice_gratitude' OR LOWER(p.name) = 'gratitude')
+      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+     ORDER BY de.entry_date DESC
      LIMIT 5`,
     LOCAL_USER_ID,
     sevenDaysAgo,
@@ -109,14 +118,15 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
   const sessionNotes = [session?.note, session?.pattern_noticed].filter((value) => value?.trim()).length;
 
   return {
-    reviewComplete: Boolean(session),
+    reviewStarted: Boolean(session),
+    reviewComplete: Boolean(session?.completed_at),
     streak: await getCurrentReviewStreak(),
     reviewedPractices: reviewed?.count ?? 0,
     notesAdded: (entryNotes?.count ?? 0) + sessionNotes,
     patternsWorthNoticing: (blockerPatterns?.count ?? 0) + (session?.pattern_noticed?.trim() ? 1 : 0),
     workOnToday: yesterdaySession?.adjustment_for_tomorrow?.trim() || null,
     workOnThisWeek: latestWeekly?.one_kabbalah?.trim() || latestWeekly?.what_needs_work?.trim() || null,
-    recentGratitude: recentGratitude.map((row) => ({ date: row.review_date, text: row.main_win })),
+    recentGratitude: recentGratitude.map((row) => ({ date: row.entry_date, text: row.gratitude_text })),
   };
 }
 
@@ -193,6 +203,7 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     pattern_noticed: string | null;
     adjustment_for_tomorrow: string | null;
     note: string | null;
+    completed_at: string | null;
   }>('SELECT * FROM daily_review_sessions WHERE user_id = ? AND review_date = ?', LOCAL_USER_ID, reviewDate);
 
   const entries = await db.getAllAsync<{
@@ -260,19 +271,21 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
       patternNoticed: session?.pattern_noticed,
       adjustmentForTomorrow: session?.adjustment_for_tomorrow,
       note: session?.note,
+      completedAt: session?.completed_at,
     },
     entries: draftEntries,
   };
 }
 
-export async function saveNightlyReview(reviewDate: string, draft: NightlyReviewDraft) {
+export async function saveNightlyReview(reviewDate: string, draft: NightlyReviewDraft, options: { complete?: boolean } = {}) {
   const db = await getDb();
+  const complete = options.complete === true;
   await db.withTransactionAsync(async () => {
     const sessionId = makeId('session');
     await db.runAsync(
       `INSERT INTO daily_review_sessions
-        (id, user_id, review_date, general_day_rating, bed_time, wake_time, main_win, main_struggle, pattern_noticed, adjustment_for_tomorrow, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, user_id, review_date, general_day_rating, bed_time, wake_time, main_win, main_struggle, pattern_noticed, adjustment_for_tomorrow, note, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE NULL END)
        ON CONFLICT(user_id, review_date) DO UPDATE SET
         general_day_rating = excluded.general_day_rating,
         bed_time = excluded.bed_time,
@@ -282,6 +295,7 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
         pattern_noticed = excluded.pattern_noticed,
         adjustment_for_tomorrow = excluded.adjustment_for_tomorrow,
         note = excluded.note,
+        completed_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE completed_at END,
         updated_at = CURRENT_TIMESTAMP`,
       sessionId,
       LOCAL_USER_ID,
@@ -294,6 +308,8 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
       draft.session.patternNoticed ?? null,
       draft.session.adjustmentForTomorrow ?? null,
       draft.session.note ?? null,
+      complete ? 1 : 0,
+      complete ? 1 : 0,
     );
     const persistedSession = await db.getFirstAsync<{ id: string }>(
       'SELECT id FROM daily_review_sessions WHERE user_id = ? AND review_date = ?',
@@ -854,7 +870,12 @@ async function replacePracticeBlockers(db: Awaited<ReturnType<typeof getDb>>, pr
 export async function getReviewStatusMap(startDate: string, endDate: string) {
   const db = await getDb();
   const rows = await db.getAllAsync<{ review_date: string }>(
-    'SELECT review_date FROM daily_review_sessions WHERE user_id = ? AND review_date >= ? AND review_date <= ?',
+    `SELECT review_date
+     FROM daily_review_sessions
+     WHERE user_id = ?
+      AND review_date >= ?
+      AND review_date <= ?
+      AND completed_at IS NOT NULL`,
     LOCAL_USER_ID,
     startDate,
     endDate,
@@ -995,6 +1016,7 @@ export async function importAllData(exportJson: string) {
     });
     await clearRequiredFlags(db);
     await normalizeQualityScale(db);
+    await normalizeReviewCompletionState(db);
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }

@@ -12,6 +12,7 @@ import {
 } from '@/src/constants/seedData';
 import { schemaSql } from '@/src/db/schema';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
+import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -29,6 +30,7 @@ export async function initializeDatabase() {
   await db.execAsync(schemaSql);
   await ensureColumn(db, 'daily_review_sessions', 'bed_time', 'TEXT');
   await ensureColumn(db, 'daily_review_sessions', 'wake_time', 'TEXT');
+  await ensureColumn(db, 'daily_review_sessions', 'completed_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
@@ -39,6 +41,7 @@ export async function initializeDatabase() {
   }
   await syncSeedUpdates(db);
   await normalizeQualityScale(db);
+  await normalizeReviewCompletionState(db);
 }
 
 async function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: string, definition: string) {
@@ -259,5 +262,12 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync('UPDATE routine_practices SET required = 0');
     await db.runAsync('UPDATE metrics SET required = 0');
     await db.runAsync('UPDATE practices SET allow_note = 1 WHERE allow_note IS NULL');
+    await db.runAsync("UPDATE practices SET allow_note = 0 WHERE id = 'practice_gratitude'");
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+       SELECT 'practice_gratitude', id, 0
+       FROM blockers
+       WHERE active = 1`,
+    );
   });
 }

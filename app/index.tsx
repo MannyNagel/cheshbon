@@ -59,20 +59,22 @@ export default function HomeScreen() {
           <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review complete' : 'Nightly review'}</Text>
           <Text style={styles.panelCopy}>
             {summary.reviewComplete
-              ? 'The day has been reviewed. You can still reopen it if something important comes back to mind.'
-              : 'Start with the facts of the day, then notice what deserves attention.'}
+              ? 'The day has been reviewed. You can still edit it if something important comes back to mind.'
+              : summary.reviewStarted
+                ? 'Progress is saved. Continue when you are ready, then mark it complete.'
+                : 'Start with the facts of the day, then notice what deserves attention.'}
           </Text>
         </View>
-        {summary.reviewComplete ? null : (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push(`/review/${today}`)}
-            style={styles.reviewButton}
-          >
-            <NotebookPen color="#FFFFFF" size={18} />
-            <Text style={styles.reviewButtonText}>Start nightly review</Text>
-          </Pressable>
-        )}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push(`/review/${today}`)}
+          style={[styles.reviewButton, summary.reviewComplete && styles.editReviewButton]}
+        >
+          <NotebookPen color="#FFFFFF" size={18} />
+          <Text style={styles.reviewButtonText}>
+            {summary.reviewComplete ? 'Edit review' : summary.reviewStarted ? 'Continue review' : 'Start nightly review'}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.statsRow}>
@@ -320,6 +322,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: spacing.lg,
+  },
+  editReviewButton: {
+    backgroundColor: colors.blue,
   },
   reviewButtonText: {
     color: '#FFFFFF',

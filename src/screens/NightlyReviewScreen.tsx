@@ -1,4 +1,4 @@
-import { CalendarDays, Save, SkipBack, SkipForward } from 'lucide-react-native';
+import { CalendarDays, CheckCircle2, Save, SkipBack, SkipForward } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -66,17 +66,23 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
     }));
   }
 
-  async function save() {
+  async function save(complete = false) {
     setSaving(true);
     setMessage(null);
     try {
-      await saveNightlyReview(reviewDate, draft);
-      let nextMessage = 'Saved.';
+      await saveNightlyReview(reviewDate, draft, { complete });
+      if (complete) {
+        setDraft((current) => ({
+          ...current,
+          session: { ...current.session, completedAt: new Date().toISOString() },
+        }));
+      }
+      let nextMessage = complete ? 'Review marked complete.' : 'Progress saved.';
       try {
         const syncedAt = await pushLocalDataToCloudIfSignedIn();
-        if (syncedAt) nextMessage = 'Saved and pushed to cloud.';
+        if (syncedAt) nextMessage = complete ? 'Review completed and pushed to cloud.' : 'Progress saved and pushed to cloud.';
       } catch (syncError) {
-        nextMessage = syncError instanceof Error ? `Saved locally. Cloud push failed: ${syncError.message}` : 'Saved locally. Cloud push failed.';
+        nextMessage = syncError instanceof Error ? `${nextMessage} Cloud push failed: ${syncError.message}` : `${nextMessage} Cloud push failed.`;
       }
       setMessage(nextMessage);
       const range = getCalendarRange(reviewDate, calendarMode);
@@ -93,6 +99,8 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
     }
   }
 
+  const isComplete = Boolean(draft.session.completedAt);
+
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
@@ -101,6 +109,11 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
         <Text style={styles.subtitle}>
           {dayName(reviewDate)} | {monthDay(reviewDate)}
         </Text>
+        <View style={[styles.completionPill, isComplete ? styles.completionPillComplete : styles.completionPillIncomplete]}>
+          <Text style={[styles.completionText, isComplete ? styles.completionTextComplete : styles.completionTextIncomplete]}>
+            {isComplete ? 'Complete' : 'Incomplete'}
+          </Text>
+        </View>
         <View style={styles.streakRow}>
           <Text style={styles.streakText}>{streak} day streak</Text>
           <Pressable
@@ -201,10 +214,16 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
             ))
           )}
 
-          <Pressable accessibilityRole="button" disabled={saving} onPress={save} style={styles.saveButton}>
-            <Save color="#FFFFFF" size={18} />
-            <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save review'}</Text>
-          </Pressable>
+          <View style={styles.actionRow}>
+            <Pressable accessibilityRole="button" disabled={saving} onPress={() => save(false)} style={styles.progressButton}>
+              <Save color="#FFFFFF" size={18} />
+              <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save progress'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={saving} onPress={() => save(true)} style={styles.completeButton}>
+              <CheckCircle2 color="#FFFFFF" size={18} />
+              <Text style={styles.saveText}>{saving ? 'Saving...' : 'Complete'}</Text>
+            </Pressable>
+          </View>
           {message ? <Text style={styles.message}>{message}</Text> : null}
         </View>
       )}
@@ -268,6 +287,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
     maxWidth: 620,
+  },
+  completionPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  completionPillComplete: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.green,
+  },
+  completionPillIncomplete: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amber,
+  },
+  completionText: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  completionTextComplete: {
+    color: colors.green,
+  },
+  completionTextIncomplete: {
+    color: colors.amber,
   },
   calendarStrip: {
     flexDirection: 'row',
@@ -439,10 +483,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
-  saveButton: {
+  actionRow: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  progressButton: {
+    alignItems: 'center',
     backgroundColor: colors.blue,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  completeButton: {
+    alignItems: 'center',
+    backgroundColor: colors.green,
     borderRadius: 8,
     flexDirection: 'row',
     gap: spacing.sm,

@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS daily_review_sessions (
   pattern_noticed TEXT,
   adjustment_for_tomorrow TEXT,
   note TEXT,
+  completed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, review_date)
