@@ -767,7 +767,7 @@ export async function getReviewStatusMap(startDate: string, endDate: string) {
 export async function getCurrentReviewStreak() {
   const savedDates = await getReviewStatusMap(addDaysIso(todayIsoDate(), -365), todayIsoDate());
   let streak = 0;
-  let cursor = todayIsoDate();
+  let cursor = savedDates.has(todayIsoDate()) ? todayIsoDate() : addDaysIso(todayIsoDate(), -1);
   while (savedDates.has(cursor)) {
     streak += 1;
     cursor = addDaysIso(cursor, -1);
