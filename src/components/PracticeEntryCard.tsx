@@ -23,7 +23,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
       metricValues: {},
       blockerIds: [],
     };
-  const [noteOpen, setNoteOpen] = useState(Boolean(entry.note));
+  const [noteOpen, setNoteOpen] = useState(Boolean(entry.note && item.allowNote));
 
   function updateMetric(metricValue: MetricValueDraft) {
     const metric = item.metrics.find((candidate) => candidate.id === metricValue.metricId);
@@ -43,6 +43,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
 
     onChange({
       ...entry,
+      note: item.allowNote ? entry.note : null,
       status:
         metric?.name.toLowerCase() === 'status' && metricValue.valueText
           ? (metricValue.valueText as EntryStatus)
@@ -64,6 +65,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
     ? blockers.filter((blocker) => item.allowedBlockerIds?.includes(blocker.id))
     : blockers;
   const showBlockers = visibleBlockers.length > 0;
+  const showNote = item.allowNote;
 
   return (
     <View style={styles.card}>
@@ -94,12 +96,14 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
             selectedIds={entry.blockerIds.filter((blockerId) => visibleBlockers.some((blocker) => blocker.id === blockerId))}
           />
         ) : null}
-        <Pressable accessibilityRole="button" onPress={() => setNoteOpen((value) => !value)} style={styles.noteButton}>
-          <StickyNote color={colors.ink} size={17} />
-          <Text style={styles.noteButtonText}>{entry.note ? 'Note added' : 'Add note'}</Text>
-        </Pressable>
+        {showNote ? (
+          <Pressable accessibilityRole="button" onPress={() => setNoteOpen((value) => !value)} style={styles.noteButton}>
+            <StickyNote color={colors.ink} size={17} />
+            <Text style={styles.noteButtonText}>{entry.note ? 'Note added' : 'Add note'}</Text>
+          </Pressable>
+        ) : null}
       </View>
-      {noteOpen ? (
+      {showNote && noteOpen ? (
         <TextInput
           onChangeText={(note) => onChange({ ...entry, note })}
           placeholder="Optional note"
@@ -180,5 +184,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
 });

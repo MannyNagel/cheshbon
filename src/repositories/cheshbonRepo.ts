@@ -470,6 +470,7 @@ export async function getTasksForManagement() {
     description: string | null;
     domainId: string;
     domainName: string;
+    allowNote: number;
     routineId: string;
     routineName: string;
     reviewSectionId: string;
@@ -484,6 +485,7 @@ export async function getTasksForManagement() {
       p.id as practiceId,
       p.name,
       p.description,
+      p.allow_note as allowNote,
       d.id as domainId,
       d.name as domainName,
       rt.id as routineId,
@@ -590,6 +592,7 @@ export async function updateTask(input: {
   reviewSectionId: string;
   metricKind: 'completed' | 'quality' | 'number' | 'text';
   enabled: boolean;
+  allowNote: boolean;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -605,10 +608,11 @@ export async function updateTask(input: {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE practices SET name = ?, description = ?, domain_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       input.name.trim(),
       input.description?.trim() || null,
       input.domainId,
+      input.allowNote ? 1 : 0,
       input.practiceId,
     );
     await db.runAsync(
@@ -648,6 +652,9 @@ export async function updateTask(input: {
       );
     }
     await replacePracticeBlockers(db, input.practiceId, input.blockerIds);
+    if (!input.allowNote) {
+      await db.runAsync('UPDATE daily_entries SET note = NULL, updated_at = CURRENT_TIMESTAMP WHERE practice_id = ?', input.practiceId);
+    }
   });
 }
 
@@ -658,6 +665,7 @@ export async function createTask(input: {
   routineId: string;
   reviewSectionId: string;
   metricKind: 'completed' | 'quality' | 'number' | 'text';
+  allowNote: boolean;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -676,12 +684,13 @@ export async function createTask(input: {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO practices (id, user_id, domain_id, name, description) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, ?)',
       practiceId,
       LOCAL_USER_ID,
       input.domainId,
       input.name.trim(),
       input.description?.trim() || null,
+      input.allowNote ? 1 : 0,
     );
     await db.runAsync(
       `INSERT INTO metrics (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order)

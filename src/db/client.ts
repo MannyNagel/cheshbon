@@ -31,6 +31,7 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
+  await ensureColumn(db, 'practices', 'allow_note', 'INTEGER NOT NULL DEFAULT 1');
   const existing = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM domains');
   if (!existing?.count) {
     await seedDatabase(db);
@@ -255,5 +256,6 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_afternoon', sort_order = 30 WHERE id = 'rp_afternoon_seder'");
     await db.runAsync('UPDATE routine_practices SET required = 0');
     await db.runAsync('UPDATE metrics SET required = 0');
+    await db.runAsync('UPDATE practices SET allow_note = 1 WHERE allow_note IS NULL');
   });
 }

@@ -386,6 +386,8 @@ const styles = StyleSheet.create({
     height: 44,
     maxWidth: 180,
     paddingHorizontal: spacing.md,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   center: {
     padding: spacing.xxl,
@@ -429,6 +431,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: spacing.md,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   inputLabel: {
     color: colors.ink,

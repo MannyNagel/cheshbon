@@ -80,6 +80,7 @@ export type NightlyReviewItem = {
   required: boolean;
   metrics: Metric[];
   allowedBlockerIds?: string[] | null;
+  allowNote: boolean;
 };
 
 export type NightlyReviewSection = ReviewSection & {

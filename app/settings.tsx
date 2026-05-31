@@ -486,6 +486,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: spacing.md,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   list: {
     backgroundColor: colors.surface,
@@ -531,6 +533,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     minHeight: 240,
     padding: spacing.md,
+    textAlign: 'left',
     textAlignVertical: 'top',
+    writingDirection: 'ltr',
   },
 });

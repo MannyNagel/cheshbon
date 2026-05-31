@@ -33,6 +33,7 @@ type ReviewItemRow = {
   practice_id: string;
   practice_name: string;
   practice_description: string | null;
+  allow_note: number;
   display_name_override: string | null;
   help_text_override: string | null;
   domain_id: string;
@@ -97,6 +98,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       p.id as practice_id,
       p.name as practice_name,
       p.description as practice_description,
+      p.allow_note,
       rp.display_name_override,
       rp.help_text_override,
       d.id as domain_id,
@@ -177,6 +179,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       required: row.required === 1,
       metrics: metricsByPractice.get(row.practice_id) ?? [],
       allowedBlockerIds: customizedBlockerPractices.has(row.practice_id) ? blockersByPractice.get(row.practice_id) ?? [] : null,
+      allowNote: row.allow_note === 1,
     };
     section.items.push(item);
     sectionMap.set(row.review_section_id, section);

@@ -21,6 +21,7 @@ type TaskRow = {
   description: string | null;
   domainId: string;
   domainName: string;
+  allowNote: number;
   routineId: string;
   routineName: string;
   reviewSectionId: string;
@@ -50,6 +51,7 @@ const emptyForm = {
   reviewSectionId: '',
   metricKind: 'quality' as MetricKind,
   enabled: true,
+  allowNote: true,
   blockersEnabled: true,
   blockerIds: [] as string[],
 };
@@ -157,6 +159,7 @@ export default function PracticesScreen() {
       reviewSectionId: task.reviewSectionId,
       metricKind: metricTypeToKind(task.metricType),
       enabled: task.enabled === 1,
+      allowNote: task.allowNote === 1,
       blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
       blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
     });
@@ -388,7 +391,8 @@ function TaskForm({
           ) : null}
         </View>
       </Field>
-      <View style={styles.switchRow}>
+      <View style={styles.optionRow}>
+        <Toggle label={form.allowNote ? 'Allow note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
         <Toggle label={form.enabled ? 'Active' : 'Hidden'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
       </View>
     </View>
@@ -542,13 +546,13 @@ const styles = StyleSheet.create({
   field: { gap: spacing.sm },
   fieldStack: { alignItems: 'flex-start', gap: spacing.sm },
   label: { color: colors.ink, fontSize: 14, fontWeight: '900' },
-  input: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 15, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  input: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 15, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'left', writingDirection: 'ltr' },
   choiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceSelected: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
   choiceText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   choiceTextSelected: { color: colors.blue },
-  switchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   toggle: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   toggleOn: { backgroundColor: colors.greenSoft, borderColor: colors.green },
   toggleText: { color: colors.ink, fontSize: 14, fontWeight: '800' },

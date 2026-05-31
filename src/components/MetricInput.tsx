@@ -224,6 +224,8 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
   textArea: {
     minHeight: 78,
