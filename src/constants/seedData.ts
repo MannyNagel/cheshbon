@@ -16,7 +16,7 @@ export const reviewSections = [
   ['section_morning', 'Morning', 'First anchors and the start of the day'],
   ['section_afternoon', 'Afternoon', 'Middle of the day and practical avodah'],
   ['section_night', 'Night', 'Closing the day with clarity'],
-  ['section_overall', 'Overview', 'All-day patterns and reflection'],
+  ['section_overall', 'Overview', 'All-day practices'],
 ] as const;
 export const routines = [
   ['routine_core', 'Year-Round Core', 'The stable siddur-like core for every day', 'core', 0],

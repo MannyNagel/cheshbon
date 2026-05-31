@@ -170,7 +170,7 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
   await seedDatabase(db);
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      "UPDATE review_sections SET name = 'Overview', description = 'All-day patterns and reflection', sort_order = 40, active = 1 WHERE id = 'section_overall'",
+      "UPDATE review_sections SET name = 'Overview', description = 'All-day practices', sort_order = 40, active = 1 WHERE id = 'section_overall'",
     );
     await db.runAsync("UPDATE review_sections SET sort_order = 30, active = 1 WHERE id = 'section_night'");
     await db.runAsync("UPDATE review_sections SET active = 0 WHERE id = 'section_evening'");

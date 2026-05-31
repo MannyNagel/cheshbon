@@ -121,28 +121,50 @@ export type NightlyReviewDraft = {
 };
 
 export type TrendSummary = {
-  domainAverages: Array<{
+  domainInsights: Array<{
     domainId: string;
     domainName: string;
-    average7: number | null;
-    average30: number | null;
+    score7: number | null;
+    score30: number | null;
+    trackedPractices: number;
     direction: 'up' | 'down' | 'steady' | 'insufficient';
   }>;
-  completionByPractice: Array<{
+  prayerUnit: {
+    score7: number | null;
+    score30: number | null;
+    parts: Array<{
+      practiceId: string;
+      practiceName: string;
+      score7: number | null;
+      score30: number | null;
+    }>;
+  } | null;
+  practiceTrends: Array<{
     practiceId: string;
     practiceName: string;
-    completionRate: number;
-    trackedCount: number;
-  }>;
-  qualityByPractice: Array<{
-    practiceId: string;
-    practiceName: string;
-    average: number;
-    sampleSize: number;
+    domainName: string;
+    metricName: string;
+    metricKind: 'complete' | 'number' | 'quality' | 'text';
+    unitLabel: string;
+    week: TrendWindow;
+    month: TrendWindow;
+    allTime: TrendWindow;
+    recentEntries: Array<{ date: string; text: string }>;
   }>;
   commonBlockers: Array<{
     blockerId: string;
     blockerName: string;
     count: number;
   }>;
+};
+
+export type TrendPoint = {
+  label: string;
+  value: number | null;
+};
+
+export type TrendWindow = {
+  average: number | null;
+  sampleSize: number;
+  points: TrendPoint[];
 };
