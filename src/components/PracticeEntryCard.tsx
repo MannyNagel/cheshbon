@@ -72,7 +72,6 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
           <Text style={styles.title}>{item.displayName}</Text>
           <Text style={styles.meta}>{item.domainName}</Text>
         </View>
-        {item.required ? <Text style={styles.required}>Required</Text> : null}
       </View>
       {item.helpText ? <Text style={styles.help}>{item.helpText}</Text> : null}
       <View style={styles.metrics}>
@@ -142,15 +141,6 @@ const styles = StyleSheet.create({
   meta: {
     color: colors.muted,
     fontSize: 13,
-  },
-  required: {
-    backgroundColor: colors.greenSoft,
-    borderRadius: 8,
-    color: colors.green,
-    fontSize: 12,
-    fontWeight: '800',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
   },
   help: {
     color: colors.muted,

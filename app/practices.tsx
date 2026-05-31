@@ -28,7 +28,6 @@ type TaskRow = {
   metricId: string | null;
   metricName: string | null;
   metricType: string | null;
-  required: number;
   enabled: number;
   sortOrder: number;
   archivedFrom: string | null;
@@ -50,7 +49,6 @@ const emptyForm = {
   routineId: '',
   reviewSectionId: '',
   metricKind: 'quality' as MetricKind,
-  required: false,
   enabled: true,
   blockersEnabled: true,
   blockerIds: [] as string[],
@@ -158,7 +156,6 @@ export default function PracticesScreen() {
       routineId: task.routineId,
       reviewSectionId: task.reviewSectionId,
       metricKind: metricTypeToKind(task.metricType),
-      required: task.required === 1,
       enabled: task.enabled === 1,
       blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
       blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
@@ -271,8 +268,7 @@ export default function PracticesScreen() {
                       {task.routineName} | {task.reviewSectionName} | {task.domainName}
                     </Text>
                     <Text style={styles.taskMeta}>
-                      {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} |{' '}
-                      {task.required ? 'required' : 'optional'} | {task.enabled ? 'active' : 'hidden'}
+                      {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} | {task.enabled ? 'active' : 'hidden'}
                     </Text>
                   </View>
                   <Pressable accessibilityRole="button" onPress={() => startEdit(task)} style={styles.editButton}>
@@ -393,7 +389,6 @@ function TaskForm({
         </View>
       </Field>
       <View style={styles.switchRow}>
-        <Toggle label={form.required ? 'Required' : 'Optional'} selected={form.required} onPress={() => setForm((current) => ({ ...current, required: !current.required }))} />
         <Toggle label={form.enabled ? 'Active' : 'Hidden'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
       </View>
     </View>

@@ -448,9 +448,7 @@ function PracticeRow({ task }: { task: RoutineTask }) {
           {task.reviewSectionName} | {task.domainName} | {task.metricName ?? 'No metric'}
         </Text>
       </View>
-      <Text style={[styles.practiceBadge, !task.enabled && styles.practiceBadgeMuted]}>
-        {task.enabled ? (task.required ? 'Required' : 'Optional') : 'Hidden'}
-      </Text>
+      {!task.enabled ? <Text style={[styles.practiceBadge, styles.practiceBadgeMuted]}>Hidden</Text> : null}
     </View>
   );
 }

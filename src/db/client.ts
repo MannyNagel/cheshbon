@@ -253,5 +253,7 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
        VALUES ('rp_shiur', 'routine_yeshiva_zman', 'practice_shiur', 'section_afternoon', 20, 1)`,
     );
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_afternoon', sort_order = 30 WHERE id = 'rp_afternoon_seder'");
+    await db.runAsync('UPDATE routine_practices SET required = 0');
+    await db.runAsync('UPDATE metrics SET required = 0');
   });
 }

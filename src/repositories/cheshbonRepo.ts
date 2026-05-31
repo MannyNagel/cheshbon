@@ -589,7 +589,6 @@ export async function updateTask(input: {
   routineId: string;
   reviewSectionId: string;
   metricKind: 'completed' | 'quality' | 'number' | 'text';
-  required: boolean;
   enabled: boolean;
   blockerIds?: string[];
 }) {
@@ -619,7 +618,7 @@ export async function updateTask(input: {
       input.routineId,
       input.reviewSectionId,
       sortOrder,
-      input.required ? 1 : 0,
+      0,
       input.enabled ? 1 : 0,
       input.routinePracticeId,
     );
@@ -632,7 +631,7 @@ export async function updateTask(input: {
         metric.type,
         metric.min,
         metric.max,
-        input.required ? 1 : 0,
+        0,
         input.metricId,
       );
     } else {
@@ -645,7 +644,7 @@ export async function updateTask(input: {
         metric.type,
         metric.min,
         metric.max,
-        input.required ? 1 : 0,
+        0,
       );
     }
     await replacePracticeBlockers(db, input.practiceId, input.blockerIds);
@@ -659,7 +658,6 @@ export async function createTask(input: {
   routineId: string;
   reviewSectionId: string;
   metricKind: 'completed' | 'quality' | 'number' | 'text';
-  required: boolean;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -694,7 +692,7 @@ export async function createTask(input: {
       metric.type,
       metric.min,
       metric.max,
-      input.required ? 1 : 0,
+      0,
     );
     await db.runAsync(
       `INSERT INTO routine_practices
@@ -705,7 +703,7 @@ export async function createTask(input: {
       practiceId,
       input.reviewSectionId,
       sortOrder,
-      input.required ? 1 : 0,
+      0,
     );
     await replacePracticeBlockers(db, practiceId, input.blockerIds);
   });
@@ -895,6 +893,7 @@ export async function importAllData(exportJson: string) {
         }
       }
     });
+    await clearRequiredFlags(db);
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
@@ -925,6 +924,11 @@ async function getImportColumnMap() {
     columnMap[tableName] = new Set(columns.map((column) => column.name));
   }
   return columnMap;
+}
+
+async function clearRequiredFlags(db: Awaited<ReturnType<typeof getDb>>) {
+  await db.runAsync('UPDATE routine_practices SET required = 0');
+  await db.runAsync('UPDATE metrics SET required = 0');
 }
 
 const exportTableNames = [

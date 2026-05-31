@@ -106,7 +106,6 @@ function MetricFrame({ metric, children }: { metric: Metric; children: React.Rea
     <View style={styles.metric}>
       <Text style={styles.label}>
         {metric.name}
-        {metric.required ? <Text style={styles.required}> *</Text> : null}
       </Text>
       {metric.helpText ? <Text style={styles.help}>{metric.helpText}</Text> : null}
       {children}
@@ -151,9 +150,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     lineHeight: 18,
-  },
-  required: {
-    color: colors.rose,
   },
   row: {
     flexDirection: 'row',
