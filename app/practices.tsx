@@ -1,6 +1,6 @@
 import { CirclePlus, Pencil, Save, Trash2, X } from 'lucide-react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
@@ -65,6 +65,7 @@ export default function PracticesScreen() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const handledAddParamRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -88,7 +89,14 @@ export default function PracticesScreen() {
   }, [load]);
 
   useEffect(() => {
-    if (params.mode === 'add' && options) {
+    if (params.mode !== 'add') {
+      handledAddParamRef.current = null;
+      return;
+    }
+    if (options) {
+      const addParamKey = params.routineId ?? '__default__';
+      if (handledAddParamRef.current === addParamKey) return;
+      handledAddParamRef.current = addParamKey;
       setEditing(null);
       setForm({
         ...emptyForm,
@@ -187,6 +195,7 @@ export default function PracticesScreen() {
         await createTask(form);
         setMessage(await syncedMessage('Practice added.'));
       }
+      router.replace('/practices');
       setMode('list');
       setEditing(null);
       await load();
@@ -203,6 +212,7 @@ export default function PracticesScreen() {
     try {
       await removeTaskFromTodayForward(task.routinePracticeId);
       setMessage(await syncedMessage('Practice removed from today onward.'));
+      router.replace('/practices');
       setMode('list');
       setEditing(null);
       await load();
@@ -237,7 +247,14 @@ export default function PracticesScreen() {
               <Text style={styles.iconActionText}>Add Practice</Text>
             </Pressable>
           ) : (
-            <Pressable accessibilityRole="button" onPress={() => setMode('list')} style={styles.iconAction}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                router.replace('/practices');
+                setMode('list');
+              }}
+              style={styles.iconAction}
+            >
               <X color={colors.ink} size={18} />
               <Text style={styles.iconActionText}>Cancel</Text>
             </Pressable>
