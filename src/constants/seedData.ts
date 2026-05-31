@@ -11,14 +11,12 @@ export const domains = [
   ['domain_foundations', 'Morning & Night Foundations', 'Anchors at the edges of the day'],
   ['domain_seasonal', 'Seasonal Avodah', 'Avodah that changes by calendar and context'],
 ] as const;
-
 export const reviewSections = [
   ['section_morning', 'Morning', 'First anchors and the start of the day'],
   ['section_afternoon', 'Afternoon', 'Middle of the day and practical avodah'],
   ['section_night', 'Night', 'Closing the day with clarity'],
   ['section_overall', 'Overview', 'All-day patterns and reflection'],
 ] as const;
-
 export const routines = [
   ['routine_core', 'Year-Round Core', 'The stable siddur-like core for every day', 'core', 0],
   ['routine_yeshiva_zman', 'Yeshiva Zman', 'Sunday through Thursday seder structure', 'zman', 10],
@@ -76,7 +74,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_tefillah_brachot',
     name: 'Shacharit',
     metrics: [
-      { id: 'metric_shacharit_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_shacharit_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
       { id: 'metric_shacharit_on_time', name: 'On time', metricType: 'boolean' },
     ],
   },
@@ -85,7 +83,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_tefillah_brachot',
     name: 'Mincha',
     metrics: [
-      { id: 'metric_mincha_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_mincha_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -93,7 +91,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_tefillah_brachot',
     name: 'Maariv',
     metrics: [
-      { id: 'metric_maariv_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_maariv_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -102,7 +100,7 @@ export const practices: PracticeSeed[] = [
     name: 'Eating',
     description: 'Healthy, portioned, timed.',
     metrics: [
-      { id: 'metric_eating_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_eating_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -111,7 +109,7 @@ export const practices: PracticeSeed[] = [
     name: 'Brachot',
     description: 'Said brachot with kavannah and remembered after-brachot.',
     metrics: [
-      { id: 'metric_brachot_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_brachot_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -120,7 +118,7 @@ export const practices: PracticeSeed[] = [
     name: 'Phone & computer use',
     description: 'Stayed off phone as much as possible and avoided distractions.',
     metrics: [
-      { id: 'metric_phone_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_phone_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -139,7 +137,7 @@ export const practices: PracticeSeed[] = [
         ],
       },
       { id: 'metric_shiur_completed', name: 'Completed', metricType: 'boolean' },
-      { id: 'metric_shiur_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_shiur_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -147,7 +145,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_middos',
     name: 'Positivity',
     metrics: [
-      { id: 'metric_positivity_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_positivity_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -155,7 +153,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_middos',
     name: 'Complimentary',
     metrics: [
-      { id: 'metric_complimentary_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_complimentary_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -170,7 +168,7 @@ export const practices: PracticeSeed[] = [
     name: 'Morning seder',
     metrics: [
       { id: 'metric_morning_seder_completed', name: 'Completed', metricType: 'boolean' },
-      { id: 'metric_morning_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_morning_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -179,7 +177,7 @@ export const practices: PracticeSeed[] = [
     name: 'Afternoon seder',
     metrics: [
       { id: 'metric_afternoon_seder_completed', name: 'Completed', metricType: 'boolean' },
-      { id: 'metric_afternoon_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_afternoon_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -188,7 +186,7 @@ export const practices: PracticeSeed[] = [
     name: 'Night seder',
     metrics: [
       { id: 'metric_night_seder_completed', name: 'Completed', metricType: 'boolean' },
-      { id: 'metric_night_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_night_seder_focus', name: 'Focus quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
   },
   {
@@ -205,7 +203,7 @@ export const practices: PracticeSeed[] = [
     domainId: 'domain_middos',
     name: 'Did what was realistic without spiraling',
     metrics: [
-      { id: 'metric_low_capacity_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 10 },
+      { id: 'metric_low_capacity_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
       { id: 'metric_low_capacity_note', name: 'Note', metricType: 'text' },
     ],
   },

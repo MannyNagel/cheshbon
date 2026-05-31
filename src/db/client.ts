@@ -11,6 +11,7 @@ import {
   schedules,
 } from '@/src/constants/seedData';
 import { schemaSql } from '@/src/db/schema';
+import { normalizeQualityScale } from '@/src/db/qualityScale';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -37,6 +38,7 @@ export async function initializeDatabase() {
     await seedDatabase(db);
   }
   await syncSeedUpdates(db);
+  await normalizeQualityScale(db);
 }
 
 async function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: string, definition: string) {
@@ -226,7 +228,7 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync(
       `INSERT OR IGNORE INTO metrics
         (id, practice_id, name, metric_type, scale_min, scale_max, sort_order)
-       VALUES ('metric_positivity_quality', 'practice_positivity', 'Quality', 'scale', 1, 10, 1)`,
+       VALUES ('metric_positivity_quality', 'practice_positivity', 'Quality', 'scale', 1, 5, 1)`,
     );
     await db.runAsync(
       `INSERT OR IGNORE INTO routine_practices
@@ -241,7 +243,7 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync(
       `INSERT OR IGNORE INTO metrics
         (id, practice_id, name, metric_type, scale_min, scale_max, sort_order)
-       VALUES ('metric_complimentary_quality', 'practice_complimentary', 'Quality', 'scale', 1, 10, 1)`,
+       VALUES ('metric_complimentary_quality', 'practice_complimentary', 'Quality', 'scale', 1, 5, 1)`,
     );
     await db.runAsync(
       `INSERT OR IGNORE INTO routine_practices

@@ -38,7 +38,7 @@ type TaskRow = {
 
 const metricOptions: Array<{ id: MetricKind; label: string }> = [
   { id: 'completed', label: 'Completed' },
-  { id: 'quality', label: 'Quality 1-10' },
+  { id: 'quality', label: 'Quality 1-5' },
   { id: 'number', label: 'Number' },
   { id: 'text', label: 'Text' },
 ];

@@ -78,7 +78,7 @@ export default function TrendsScreen() {
             </View>
           ))
         ) : (
-          <Empty text="Quality averages use 1-10 quality metrics." />
+          <Empty text="Quality averages use 1-5 quality metrics." />
         )}
       </Section>
 

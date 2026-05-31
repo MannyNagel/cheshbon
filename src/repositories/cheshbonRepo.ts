@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import { getDb } from '@/src/db/client';
+import { normalizeQualityScale } from '@/src/db/qualityScale';
 import type {
   Blocker,
   EntryDraft,
@@ -600,7 +601,7 @@ export async function updateTask(input: {
     input.metricKind === 'completed'
       ? { name: 'Completed', type: 'boolean', min: null, max: null }
       : input.metricKind === 'quality'
-        ? { name: 'Quality', type: 'scale', min: 1, max: 10 }
+        ? { name: 'Quality', type: 'scale', min: 1, max: 5 }
         : input.metricKind === 'number'
           ? { name: 'Number', type: 'number', min: null, max: null }
           : { name: 'Text', type: 'text', min: null, max: null };
@@ -677,7 +678,7 @@ export async function createTask(input: {
     input.metricKind === 'completed'
       ? { name: 'Completed', type: 'boolean', min: null, max: null }
       : input.metricKind === 'quality'
-        ? { name: 'Quality', type: 'scale', min: 1, max: 10 }
+        ? { name: 'Quality', type: 'scale', min: 1, max: 5 }
         : input.metricKind === 'number'
           ? { name: 'Number', type: 'number', min: null, max: null }
           : { name: 'Text', type: 'text', min: null, max: null };
@@ -903,6 +904,7 @@ export async function importAllData(exportJson: string) {
       }
     });
     await clearRequiredFlags(db);
+    await normalizeQualityScale(db);
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
