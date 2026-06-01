@@ -380,6 +380,93 @@ function ToggleButton({ label, selected, onPress }: { label: string; selected: b
 
 function TutorialSection() {
   const [open, setOpen] = useState(false);
+  const tutorialCards = [
+    {
+      title: 'Welcome to Cheshbon',
+      text:
+        'Cheshbon is a personal reflection app for reviewing your day with honesty, structure, and purpose. The word comes from cheshbon hanefesh, an accounting of the soul: a steady look at choices, habits, priorities, growth, and areas that need attention.',
+    },
+    {
+      title: 'The basic idea',
+      text:
+        'Growth usually comes from noticing patterns, making small adjustments, and returning each day to the person you want to become. A short nightly review helps ordinary days become part of a larger story.',
+    },
+    {
+      title: 'How to review',
+      text:
+        'Use the Review page at night. Start with bedtime and wake time, then move through Morning, Afternoon, Night, and Overview. Answer honestly from memory. You do not need to track every moment during the day.',
+    },
+    {
+      title: 'Practices',
+      text:
+        'A practice is one thing you review, such as Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah. When creating one, choose its metric, routine, part of day, domain, blockers, whether notes are allowed, whether it is active, and optional reminder settings.',
+    },
+    {
+      title: 'Metrics',
+      text:
+        'The metric decides how you answer a practice. Completed is yes or no. Quality is a 1 to 5 rating. Number tracks a count. Text is for written answers like gratitude, daily avodah, or thoughts and reflections.',
+    },
+    {
+      title: 'Review sections',
+      text:
+        'Review sections are the parts of the day. Morning, Afternoon, Night, and Overview keep the nightly review organized. Overview is for all-day practices like eating, brachot, phone use, middos, gratitude, and current avodah.',
+    },
+    {
+      title: 'Routines',
+      text:
+        'A routine controls when practices appear. Weekly Core is the normal daily structure. Shabbos is a special overlay. You can create or edit routines, make them active or inactive, and add date ranges or days of the week when they apply.',
+    },
+    {
+      title: 'Creating a practice',
+      text:
+        'Open Practices, press Add Practice, enter the name, choose the domain and review section, pick the routine it belongs to, and select the metric type. Then decide if the practice should allow notes, use blockers, be markable for tomorrow, and be active right away.',
+    },
+    {
+      title: 'Editing practices',
+      text:
+        'Open Practices and select a practice to edit its name, domain, routine, review section, metric, note setting, blockers, reminder setting, or active status. Use Remove from the edit screen when you want it gone from today forward.',
+    },
+    {
+      title: 'Rearranging practices',
+      text:
+        'On the Practices page, choose the review-section sort and press Reorder. Use the up and down buttons to put practices in the order you want them to appear during the review, even when they come from different routines.',
+    },
+    {
+      title: 'Blockers',
+      text:
+        'Blockers explain what got in the way, like tired, rushed, phone, stress, or lack of planning. A practice can use all blockers, only some blockers, or no blockers. Edit the blocker list in Settings, and customize which blockers apply on each practice.',
+    },
+    {
+      title: 'Notes',
+      text:
+        'Notes are for short context that a metric cannot capture. Some practices benefit from notes, and some become cluttered by them. Turn notes on or off when creating or editing a practice. On the review page, use Add note when you want the one-line note box.',
+    },
+    {
+      title: 'Current Avodah',
+      text:
+        'Current Avodah is for the thing you want to carry forward. Daily Avodah can hold what you want to work on tomorrow. Weekly Avodah can hold a broader focus from Shabbos. The Today page shows the most recent relevant avodah when it exists.',
+    },
+    {
+      title: 'Reminders',
+      text:
+        'Settings lets you opt into practice reminders and the morning reminder. If practice reminders are on, markable practices can be remembered for tomorrow. The morning reminder can show your Daily Avodah and the practices you marked.',
+    },
+    {
+      title: 'Trends',
+      text:
+        'The Trends page helps you look beyond one day. It groups patterns by domain and practice, shows quality or completion over time, and lists recent text entries so you can notice what keeps showing up.',
+    },
+    {
+      title: 'Account and cloud',
+      text:
+        'Use Account in Settings to sign in. Your data can sync through the cloud so the same cheshbon is available on your phone and computer. After signing in, the app pulls cloud data and saves future changes automatically.',
+    },
+    {
+      title: 'A good starting setup',
+      text:
+        'Start small. Keep the practices that help you review real life, remove what feels noisy, and add specialty routines only when your schedule calls for them. The system should feel serious and honest without becoming heavy.',
+    },
+  ];
   return (
     <View style={styles.section}>
       <Pressable accessibilityRole="button" onPress={() => setOpen((value) => !value)} style={styles.tutorialHeader}>
@@ -391,35 +478,23 @@ function TutorialSection() {
       </Pressable>
       {open ? (
         <View style={styles.tutorialBox}>
-          <TutorialCard
-            title="The basic idea"
-            text="Cheshbon is a nightly review. You choose practices, answer them each night, and slowly notice patterns over time."
-          />
-          <TutorialCard
-            title="Practices"
-            text="A practice is one thing you review. When creating one, choose its metric, routine, part of day, domain, blockers, whether notes are allowed, whether it is active, and optional reminder settings."
-          />
-          <TutorialCard
-            title="Routines"
-            text="A routine decides when practices appear. The default setup keeps this simple: Weekly Core plus Shabbos."
-          />
-          <TutorialCard
-            title="Review sections"
-            text="Morning, Afternoon, Night, and Overview are the parts of the daily review. Use the Practices page to rearrange practices inside those sections."
-          />
-          <TutorialCard
-            title="Starter suggestion"
-            text="Begin with a small core. Keep what helps, remove what feels noisy, and add specialty routines later when the pattern is clear."
-          />
+          {tutorialCards.map((card, index) => (
+            <TutorialCard
+              key={card.title}
+              title={card.title}
+              text={card.text}
+              last={index === tutorialCards.length - 1}
+            />
+          ))}
         </View>
       ) : null}
     </View>
   );
 }
 
-function TutorialCard({ title, text }: { title: string; text: string }) {
+function TutorialCard({ title, text, last }: { title: string; text: string; last?: boolean }) {
   return (
-    <View style={styles.tutorialCard}>
+    <View style={[styles.tutorialCard, last && styles.tutorialCardLast]}>
       <Text style={styles.smallTitle}>{title}</Text>
       <Text style={styles.tutorialText}>{text}</Text>
     </View>
@@ -843,6 +918,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: spacing.xs,
     paddingBottom: spacing.md,
+  },
+  tutorialCardLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
   },
   tutorialHeader: {
     alignItems: 'center',
