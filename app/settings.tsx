@@ -50,6 +50,7 @@ export default function SettingsScreen() {
   const authRedirectHandledRef = useRef(false);
 
   const load = useCallback(async () => {
+    let cloudStatusMessage: string | null = null;
     if (!authRedirectHandledRef.current) {
       authRedirectHandledRef.current = true;
       try {
@@ -60,7 +61,10 @@ export default function SettingsScreen() {
       }
     }
     const [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
-      getCloudStatus(),
+      getCloudStatus().catch((error) => {
+        cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
+        return { configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null };
+      }),
       getReminderPreferences(),
       getDomainEditorRows(),
       getBlockerEditorRows(),
@@ -69,10 +73,17 @@ export default function SettingsScreen() {
     setReminderPreferences(nextReminderPreferences);
     setDomainRows(nextDomainRows);
     setBlockerRows(nextBlockerRows);
+    if (cloudStatusMessage) setMessage(cloudStatusMessage);
   }, []);
 
   useEffect(() => {
-    load();
+    load().catch((error) => {
+      setMessage(error instanceof Error ? error.message : 'Settings could not load.');
+      setCloudStatus({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null });
+      setReminderPreferences({ taskRemindersEnabled: false, morningReminderEnabled: true, morningReminderTime: '05:30' });
+      setDomainRows([]);
+      setBlockerRows([]);
+    });
   }, [load]);
 
   useEffect(() => {

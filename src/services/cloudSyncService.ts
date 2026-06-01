@@ -13,24 +13,41 @@ export async function getCloudStatus(): Promise<CloudStatus> {
   if (!isSupabaseConfigured || !supabase) {
     return { configured: false, signedIn: false, email: null, name: null, lastSyncedAt: null };
   }
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await withTimeout(
+    supabase.auth.getSession(),
+    8000,
+    'Could not read the account session. Please refresh and try again.',
+  );
   if (sessionError) throw sessionError;
   const user = sessionData.session?.user;
   if (!user) return { configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null };
 
-  const { data, error } = await supabase
-    .from('cloud_snapshots')
-    .select('updated_at')
-    .eq('user_id', user.id)
-    .maybeSingle();
-  if (error) throw error;
+  let lastSyncedAt: string | null = null;
+  try {
+    const snapshotRequest = Promise.resolve(
+      supabase
+        .from('cloud_snapshots')
+        .select('updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    );
+    const { data, error } = await withTimeout(
+      snapshotRequest,
+      5000,
+      'Cloud status timed out.',
+    );
+    if (error) throw error;
+    lastSyncedAt = data?.updated_at ?? null;
+  } catch {
+    lastSyncedAt = null;
+  }
 
   return {
     configured: true,
     signedIn: true,
     email: user.email ?? null,
     name: getUserDisplayName(user.user_metadata),
-    lastSyncedAt: data?.updated_at ?? null,
+    lastSyncedAt,
   };
 }
 
@@ -85,13 +102,21 @@ export async function completeOAuthRedirectIfPresent() {
 
   const code = url.searchParams.get('code');
   if (code) {
-    const { error } = await withTimeout(
-      supabase.auth.exchangeCodeForSession(code),
-      15000,
-      'Google sign-in timed out. Please try again.',
-    );
-    cleanAuthUrl(url);
-    if (error) throw error;
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.exchangeCodeForSession(code),
+        8000,
+        'Google sign-in is taking longer than expected.',
+      );
+      if (error) throw error;
+    } catch (error) {
+      const session = await getSessionIfAvailable();
+      if (!session) {
+        throw error;
+      }
+    } finally {
+      cleanAuthUrl(url);
+    }
     return 'Signed in with Google.';
   }
 
@@ -99,13 +124,16 @@ export async function completeOAuthRedirectIfPresent() {
   const accessToken = hashParams.get('access_token');
   const refreshToken = hashParams.get('refresh_token');
   if (accessToken && refreshToken) {
-    const { error } = await withTimeout(
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }),
-      15000,
-      'Google sign-in timed out. Please try again.',
-    );
-    cleanAuthUrl(url);
-    if (error) throw error;
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }),
+        8000,
+        'Google sign-in is taking longer than expected.',
+      );
+      if (error) throw error;
+    } finally {
+      cleanAuthUrl(url);
+    }
     return 'Signed in with Google.';
   }
 
@@ -211,6 +239,17 @@ function cleanAuthUrl(url: URL) {
   }
   const query = cleanSearch.toString();
   window.history.replaceState(null, document.title, `${url.pathname}${query ? `?${query}` : ''}`);
+}
+
+async function getSessionIfAvailable() {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await withTimeout(supabase.auth.getSession(), 3000, 'Session check timed out.');
+    if (error) return null;
+    return data.session ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) {
