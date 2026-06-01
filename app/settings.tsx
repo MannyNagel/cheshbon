@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { Bell, ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -10,9 +10,12 @@ import {
   createDomain,
   getBlockerEditorRows,
   getDomainEditorRows,
+  getReminderPreferences,
   shareExportJson,
   updateBlocker,
   updateDomain,
+  updateReminderPreferences,
+  type ReminderPreferences,
 } from '@/src/repositories/cheshbonRepo';
 import {
   getCloudStatus,
@@ -32,6 +35,7 @@ type BlockerRow = { id: string; name: string; description: string | null; active
 
 export default function SettingsScreen() {
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
   const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
   const [exportText, setExportText] = useState('');
@@ -44,12 +48,14 @@ export default function SettingsScreen() {
   const autoPulledAccountRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    const [nextCloudStatus, nextDomainRows, nextBlockerRows] = await Promise.all([
+    const [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
       getCloudStatus(),
+      getReminderPreferences(),
       getDomainEditorRows(),
       getBlockerEditorRows(),
     ]);
     setCloudStatus(nextCloudStatus);
+    setReminderPreferences(nextReminderPreferences);
     setDomainRows(nextDomainRows);
     setBlockerRows(nextBlockerRows);
   }, []);
@@ -101,7 +107,7 @@ export default function SettingsScreen() {
     }
   }
 
-  if (!cloudStatus) {
+  if (!cloudStatus || !reminderPreferences) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -213,6 +219,12 @@ export default function SettingsScreen() {
       </View>
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
+      <ReminderSettings
+        preferences={reminderPreferences}
+        onChange={setReminderPreferences}
+        onReload={load}
+        setMessage={setMessage}
+      />
       <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
       <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
 
@@ -253,6 +265,90 @@ async function syncedMessage(baseMessage: string) {
     const detail = error instanceof Error ? error.message : 'Cloud push failed.';
     return `${baseMessage} Saved locally, but cloud push failed: ${detail}`;
   }
+}
+
+function ReminderSettings({
+  preferences,
+  onChange,
+  onReload,
+  setMessage,
+}: {
+  preferences: ReminderPreferences;
+  onChange: (preferences: ReminderPreferences) => void;
+  onReload: () => Promise<void>;
+  setMessage: (message: string | null) => void;
+}) {
+  const [time, setTime] = useState(preferences.morningReminderTime);
+
+  useEffect(() => {
+    setTime(preferences.morningReminderTime);
+  }, [preferences.morningReminderTime]);
+
+  async function save(next: Partial<ReminderPreferences>, message: string) {
+    try {
+      const saved = await updateReminderPreferences(next);
+      onChange(saved);
+      setTime(saved.morningReminderTime);
+      setMessage(await syncedMessage(message));
+      await onReload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save reminder settings.');
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.reminderBox}>
+        <View style={styles.reminderTitleRow}>
+          <Bell color={colors.blue} size={18} />
+          <Text style={styles.sectionTitle}>Reminders</Text>
+        </View>
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceText}>
+            <Text style={styles.smallTitle}>Practice reminders</Text>
+            <Text style={styles.preferenceMeta}>Show the Remember toggle on markable practices.</Text>
+          </View>
+          <ToggleButton
+            label={preferences.taskRemindersEnabled ? 'On' : 'Off'}
+            selected={preferences.taskRemindersEnabled}
+            onPress={() => save({ taskRemindersEnabled: !preferences.taskRemindersEnabled }, 'Reminder setting saved.')}
+          />
+        </View>
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceText}>
+            <Text style={styles.smallTitle}>Morning reminder</Text>
+            <Text style={styles.preferenceMeta}>Show the morning reminder card and browser notification.</Text>
+          </View>
+          <ToggleButton
+            label={preferences.morningReminderEnabled ? 'On' : 'Off'}
+            selected={preferences.morningReminderEnabled}
+            onPress={() => save({ morningReminderEnabled: !preferences.morningReminderEnabled }, 'Morning reminder setting saved.')}
+          />
+        </View>
+        <View style={styles.timeRow}>
+          <View style={styles.preferenceText}>
+            <Text style={styles.smallTitle}>Reminder time</Text>
+          </View>
+          <TextInput
+            onChangeText={setTime}
+            placeholder="05:30"
+            placeholderTextColor={colors.muted}
+            style={[styles.input, styles.timeInput]}
+            value={time}
+          />
+          <ActionButton icon={<Save color={colors.ink} size={17} />} label="Save time" onPress={() => save({ morningReminderTime: time }, 'Reminder time saved.')} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ToggleButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="switch" onPress={onPress} style={[styles.toggleButton, selected && styles.toggleButtonOn]}>
+      <Text style={[styles.toggleButtonText, selected && styles.toggleButtonTextOn]}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function EditableDomains({
@@ -571,6 +667,37 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
+  preferenceMeta: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  preferenceRow: {
+    alignItems: 'center',
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+    paddingTop: spacing.md,
+  },
+  preferenceText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  reminderBox: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  reminderTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   row: {
     borderBottomColor: colors.softLine,
     borderBottomWidth: 1,
@@ -592,6 +719,41 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: '900',
+  },
+  timeInput: {
+    minWidth: 94,
+    width: 110,
+  },
+  timeRow: {
+    alignItems: 'center',
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+  },
+  toggleButton: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    minHeight: 38,
+    minWidth: 64,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  toggleButtonOn: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.green,
+  },
+  toggleButtonText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  toggleButtonTextOn: {
+    color: colors.green,
   },
   disclosureHeader: {
     alignItems: 'center',

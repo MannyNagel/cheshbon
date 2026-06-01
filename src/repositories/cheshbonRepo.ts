@@ -31,6 +31,18 @@ type MetricRow = {
 };
 type MetricOptionRow = { id: string; metric_id: string; label: string; value: string; sort_order: number };
 
+export type ReminderPreferences = {
+  taskRemindersEnabled: boolean;
+  morningReminderEnabled: boolean;
+  morningReminderTime: string;
+};
+
+const defaultReminderPreferences: ReminderPreferences = {
+  taskRemindersEnabled: false,
+  morningReminderEnabled: true,
+  morningReminderTime: '05:30',
+};
+
 export type HomeSummary = {
   reviewStarted: boolean;
   reviewComplete: boolean;
@@ -43,6 +55,63 @@ export type HomeSummary = {
   };
   recentGratitude: Array<{ date: string; text: string }>;
 };
+
+export async function getReminderPreferences(): Promise<ReminderPreferences> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ key: string; value: string }>(
+    `SELECT key, value
+     FROM app_preferences
+     WHERE key IN ('task_reminders_enabled', 'morning_reminder_enabled', 'morning_reminder_time')`,
+  );
+  const values = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    taskRemindersEnabled: parseBooleanPreference(values.get('task_reminders_enabled'), defaultReminderPreferences.taskRemindersEnabled),
+    morningReminderEnabled: parseBooleanPreference(values.get('morning_reminder_enabled'), defaultReminderPreferences.morningReminderEnabled),
+    morningReminderTime: normalizeReminderTime(values.get('morning_reminder_time') ?? defaultReminderPreferences.morningReminderTime),
+  };
+}
+
+export async function updateReminderPreferences(input: Partial<ReminderPreferences>) {
+  const db = await getDb();
+  const current = await getReminderPreferences();
+  const next: ReminderPreferences = {
+    taskRemindersEnabled: input.taskRemindersEnabled ?? current.taskRemindersEnabled,
+    morningReminderEnabled: input.morningReminderEnabled ?? current.morningReminderEnabled,
+    morningReminderTime: normalizeReminderTime(input.morningReminderTime ?? current.morningReminderTime),
+  };
+  await db.withTransactionAsync(async () => {
+    await setPreference(db, 'task_reminders_enabled', next.taskRemindersEnabled ? '1' : '0');
+    await setPreference(db, 'morning_reminder_enabled', next.morningReminderEnabled ? '1' : '0');
+    await setPreference(db, 'morning_reminder_time', next.morningReminderTime);
+    if (!next.taskRemindersEnabled) {
+      await db.runAsync('UPDATE daily_entries SET remind_tomorrow = 0, updated_at = CURRENT_TIMESTAMP WHERE remind_tomorrow = 1');
+    }
+  });
+  return next;
+}
+
+async function setPreference(db: Awaited<ReturnType<typeof getDb>>, key: string, value: string) {
+  await db.runAsync(
+    `INSERT INTO app_preferences (key, value)
+     VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = CURRENT_TIMESTAMP`,
+    key,
+    value,
+  );
+}
+
+function parseBooleanPreference(value: string | undefined, fallback: boolean) {
+  if (value == null) return fallback;
+  return value === '1' || value.toLowerCase() === 'true';
+}
+
+function normalizeReminderTime(value: string) {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  if (!match) return defaultReminderPreferences.morningReminderTime;
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
 
 export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeSummary> {
   const db = await getDb();
@@ -1217,4 +1286,5 @@ const exportTableNames = [
   'practice_blockers',
   'entry_blockers',
   'weekly_reviews',
+  'app_preferences',
 ] as const;

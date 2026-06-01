@@ -8,9 +8,11 @@ import {
   createTask,
   getTaskFormOptions,
   getTasksForManagement,
+  getReminderPreferences,
   moveTaskWithinReviewSection,
   removeTaskFromTodayForward,
   updateTask,
+  type ReminderPreferences,
 } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 
@@ -68,6 +70,7 @@ const emptyForm = {
 export default function PracticesScreen() {
   const params = useLocalSearchParams<{ mode?: string; routineId?: string }>();
   const [options, setOptions] = useState<Options | null>(null);
+  const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [mode, setMode] = useState<'list' | 'add' | 'edit'>('list');
   const [editing, setEditing] = useState<TaskRow | null>(null);
@@ -79,8 +82,13 @@ export default function PracticesScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [nextOptions, nextTasks] = await Promise.all([getTaskFormOptions(), getTasksForManagement()]);
+      const [nextOptions, nextReminderPreferences, nextTasks] = await Promise.all([
+        getTaskFormOptions(),
+        getReminderPreferences(),
+        getTasksForManagement(),
+      ]);
       setOptions(nextOptions);
+      setReminderPreferences(nextReminderPreferences);
       setTasks(nextTasks);
       setForm((current) => ({
         ...current,
@@ -248,7 +256,7 @@ export default function PracticesScreen() {
     }
   }
 
-  if (!options) {
+  if (!options || !reminderPreferences) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -259,33 +267,33 @@ export default function PracticesScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle}>
-              {mode === 'list' ? 'View and edit the practices attached to routines.' : 'Choose the metric, routine, and part of day.'}
-            </Text>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>
+            {mode === 'list' ? 'View and edit the practices attached to routines.' : 'Choose the metric, routine, and part of day.'}
+          </Text>
+        </View>
+        {mode === 'list' ? (
+          <View style={styles.headerActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                const next = !reorderMode;
+                setReorderMode(next);
+                if (next) setSortBy('section');
+              }}
+              style={[styles.iconAction, reorderMode && styles.iconActionActive]}
+            >
+              <ArrowUp color={reorderMode ? colors.blue : colors.ink} size={17} />
+              <Text style={[styles.iconActionText, reorderMode && styles.iconActionTextActive]}>{reorderMode ? 'Done' : 'Rearrange'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={startAdd} style={styles.iconAction}>
+              <CirclePlus color={colors.blue} size={18} />
+              <Text style={styles.iconActionText}>Add Practice</Text>
+            </Pressable>
           </View>
-          {mode === 'list' ? (
-            <View style={styles.headerActions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  const next = !reorderMode;
-                  setReorderMode(next);
-                  if (next) setSortBy('section');
-                }}
-                style={[styles.iconAction, reorderMode && styles.iconActionActive]}
-              >
-                <ArrowUp color={reorderMode ? colors.blue : colors.ink} size={17} />
-                <Text style={[styles.iconActionText, reorderMode && styles.iconActionTextActive]}>{reorderMode ? 'Done' : 'Rearrange'}</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={startAdd} style={styles.iconAction}>
-                <CirclePlus color={colors.blue} size={18} />
-                <Text style={styles.iconActionText}>Add Practice</Text>
-              </Pressable>
-            </View>
-          ) : (
+        ) : (
+          <View style={styles.headerActions}>
             <Pressable
               accessibilityRole="button"
               onPress={() => {
@@ -297,8 +305,8 @@ export default function PracticesScreen() {
               <X color={colors.ink} size={18} />
               <Text style={styles.iconActionText}>Cancel</Text>
             </Pressable>
-          )}
-        </View>
+          </View>
+        )}
       </View>
 
       {mode === 'list' ? (
@@ -366,7 +374,7 @@ export default function PracticesScreen() {
           ))}
         </View>
       ) : (
-        <TaskForm form={form} options={options} setForm={setForm} />
+        <TaskForm form={form} options={options} reminderPreferences={reminderPreferences} setForm={setForm} />
       )}
 
       {mode !== 'list' ? (
@@ -401,10 +409,12 @@ async function syncedMessage(baseMessage: string) {
 function TaskForm({
   form,
   options,
+  reminderPreferences,
   setForm,
 }: {
   form: typeof emptyForm;
   options: Options;
+  reminderPreferences: ReminderPreferences;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
 }) {
   const domainChoices = useMemo(() => options.domains, [options.domains]);
@@ -475,7 +485,9 @@ function TaskForm({
       </Field>
       <View style={styles.optionRow}>
         <Toggle label={form.allowNote ? 'Allow note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
-        <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
+        {reminderPreferences.taskRemindersEnabled ? (
+          <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
+        ) : null}
         <Toggle label={form.enabled ? 'Active' : 'Hidden'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
       </View>
     </View>
@@ -568,10 +580,10 @@ function sectionRank(name: string) {
 const styles = StyleSheet.create({
   center: { alignItems: 'center', backgroundColor: colors.paper, flex: 1, justifyContent: 'center' },
   container: { backgroundColor: colors.paper, gap: spacing.lg, padding: spacing.lg, paddingBottom: 96 },
-  header: { gap: spacing.sm },
+  header: { alignItems: 'flex-start', gap: spacing.md },
   headerRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
-  headerActions: { alignItems: 'flex-end', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'flex-end' },
-  headerText: { flex: 1, gap: spacing.sm },
+  headerActions: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'flex-start' },
+  headerText: { alignSelf: 'stretch', gap: spacing.sm },
   title: { color: colors.ink, fontSize: 32, fontWeight: '900' },
   subtitle: { color: colors.muted, fontSize: 16, lineHeight: 22 },
   iconAction: {

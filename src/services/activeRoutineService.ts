@@ -1,6 +1,6 @@
 import { getDb } from '@/src/db/client';
 import type { NightlyReviewItem, NightlyReviewSection, RoutineTemplate } from '@/src/models/types';
-import { getMetricsForPracticeIds } from '@/src/repositories/cheshbonRepo';
+import { getMetricsForPracticeIds, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
 import { dayOfWeek } from '@/src/utils/dates';
 
 type RoutineRow = {
@@ -86,6 +86,7 @@ export async function getActiveRoutinesForDate(reviewDate: string): Promise<Rout
 
 export async function getNightlyReviewItems(reviewDate: string): Promise<NightlyReviewSection[]> {
   const db = await getDb();
+  const reminderPreferences = await getReminderPreferences();
   const activeRoutines = await getActiveRoutinesForDate(reviewDate);
   if (activeRoutines.length === 0) return [];
 
@@ -182,7 +183,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       metrics: metricsByPractice.get(row.practice_id) ?? [],
       allowedBlockerIds: customizedBlockerPractices.has(row.practice_id) ? blockersByPractice.get(row.practice_id) ?? [] : null,
       allowNote: row.allow_note === 1,
-      markable: row.markable === 1,
+      markable: reminderPreferences.taskRemindersEnabled && row.markable === 1,
     };
     section.items.push(item);
     sectionMap.set(row.review_section_id, section);

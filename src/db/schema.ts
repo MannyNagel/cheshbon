@@ -206,6 +206,12 @@ CREATE TABLE IF NOT EXISTS weekly_reviews (
   UNIQUE(user_id, week_start_date)
 );
 
+CREATE TABLE IF NOT EXISTS app_preferences (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_practices_user_id ON practices(user_id);
 CREATE INDEX IF NOT EXISTS idx_practices_domain_id ON practices(domain_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_practice_id ON metrics(practice_id);

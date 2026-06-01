@@ -4,13 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
-import { getHomeSummary, type HomeSummary } from '@/src/repositories/cheshbonRepo';
+import { getHomeSummary, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
 import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 
 export default function HomeScreen() {
   const today = todayIsoDate();
   const yesterday = addDaysIso(today, -1);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [reviewDate, setReviewDate] = useState(yesterday);
   const [loading, setLoading] = useState(true);
 
@@ -18,9 +19,12 @@ export default function HomeScreen() {
     useCallback(() => {
       let active = true;
       setLoading(true);
-      getHomeSummary(today)
-        .then((nextSummary) => {
-          if (active) setSummary(nextSummary);
+      Promise.all([getHomeSummary(today), getReminderPreferences()])
+        .then(([nextSummary, nextReminderPreferences]) => {
+          if (active) {
+            setSummary(nextSummary);
+            setReminderPreferences(nextReminderPreferences);
+          }
         })
         .finally(() => {
           if (active) setLoading(false);
@@ -32,7 +36,7 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
-    if (!summary) return;
+    if (!summary || !reminderPreferences?.morningReminderEnabled) return;
     const body = morningReminderText(summary);
     if (!body || typeof window === 'undefined' || !('Notification' in window)) return;
     const storageKey = `cheshbon_morning_reminder_${today}`;
@@ -46,7 +50,7 @@ export default function HomeScreen() {
 
     const attemptNotification = () => {
       const now = new Date();
-      const target = morningReminderTarget(now);
+      const target = morningReminderTarget(now, reminderPreferences.morningReminderTime);
       const cutoff = new Date(target);
       cutoff.setHours(12, 0, 0, 0);
       if (now < target) {
@@ -67,9 +71,9 @@ export default function HomeScreen() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [summary, today]);
+  }, [reminderPreferences, summary, today]);
 
-  if (loading || !summary) {
+  if (loading || !summary || !reminderPreferences) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -79,7 +83,7 @@ export default function HomeScreen() {
 
   const statusColor = summary.reviewComplete ? colors.green : colors.amber;
   const statusBackground = summary.reviewComplete ? colors.greenSoft : colors.amberSoft;
-  const hasMorningReminder = Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
+  const hasMorningReminder = reminderPreferences.morningReminderEnabled && Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -238,9 +242,10 @@ function morningReminderText(summary: HomeSummary) {
   return lines.join('\n');
 }
 
-function morningReminderTarget(now: Date) {
+function morningReminderTarget(now: Date, time = '05:30') {
+  const [hours, minutes] = time.split(':').map(Number);
   const target = new Date(now);
-  target.setHours(5, 30, 0, 0);
+  target.setHours(Number.isFinite(hours) ? hours : 5, Number.isFinite(minutes) ? minutes : 30, 0, 0);
   return target;
 }
 
