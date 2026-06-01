@@ -51,11 +51,15 @@ export default function SettingsScreen() {
 
   const load = useCallback(async () => {
     let cloudStatusMessage: string | null = null;
+    let oauthCompleted = false;
     if (!authRedirectHandledRef.current) {
       authRedirectHandledRef.current = true;
       try {
         const authMessage = await completeOAuthRedirectIfPresent();
-        if (authMessage) setMessage(authMessage);
+        if (authMessage) {
+          oauthCompleted = true;
+          setMessage(authMessage);
+        }
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Google sign-in could not be completed.');
       }
@@ -63,7 +67,7 @@ export default function SettingsScreen() {
     const [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
       getCloudStatus().catch((error) => {
         cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
-        return { configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null };
+        return { configured: true, signedIn: oauthCompleted, email: null, name: null, lastSyncedAt: null };
       }),
       getReminderPreferences(),
       getDomainEditorRows(),
