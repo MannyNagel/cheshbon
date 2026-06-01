@@ -18,6 +18,7 @@ import {
   type ReminderPreferences,
 } from '@/src/repositories/cheshbonRepo';
 import {
+  completeOAuthRedirectIfPresent,
   getCloudStatus,
   pullCloudDataToLocal,
   pullCloudDataToLocalIfAvailable,
@@ -46,8 +47,18 @@ export default function SettingsScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const autoPulledAccountRef = useRef<string | null>(null);
+  const authRedirectHandledRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (!authRedirectHandledRef.current) {
+      authRedirectHandledRef.current = true;
+      try {
+        const authMessage = await completeOAuthRedirectIfPresent();
+        if (authMessage) setMessage(authMessage);
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Google sign-in could not be completed.');
+      }
+    }
     const [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
       getCloudStatus(),
       getReminderPreferences(),

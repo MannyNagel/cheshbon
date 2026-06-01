@@ -61,13 +61,55 @@ export async function signUpForCloud(name: string, email: string, password: stri
 export async function signInWithGoogle() {
   const client = requireSupabase();
   const redirectTo = getAuthRedirectUrl();
-  const { error } = await client.auth.signInWithOAuth({
+  const { data, error } = await client.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
+      skipBrowserRedirect: true,
     },
   });
   if (error) throw error;
+  if (data.url && typeof window !== 'undefined') {
+    window.location.assign(data.url);
+  }
+}
+
+export async function completeOAuthRedirectIfPresent() {
+  if (!isSupabaseConfigured || !supabase || typeof window === 'undefined') return null;
+  const url = new URL(window.location.href);
+  const errorDescription = url.searchParams.get('error_description') ?? url.searchParams.get('error');
+  if (errorDescription) {
+    cleanAuthUrl(url);
+    throw new Error(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+  }
+
+  const code = url.searchParams.get('code');
+  if (code) {
+    const { error } = await withTimeout(
+      supabase.auth.exchangeCodeForSession(code),
+      15000,
+      'Google sign-in timed out. Please try again.',
+    );
+    cleanAuthUrl(url);
+    if (error) throw error;
+    return 'Signed in with Google.';
+  }
+
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  const accessToken = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
+  if (accessToken && refreshToken) {
+    const { error } = await withTimeout(
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }),
+      15000,
+      'Google sign-in timed out. Please try again.',
+    );
+    cleanAuthUrl(url);
+    if (error) throw error;
+    return 'Signed in with Google.';
+  }
+
+  return null;
 }
 
 export async function signOutOfCloud() {
@@ -159,6 +201,30 @@ function getAuthRedirectUrl() {
     return `${window.location.origin}/settings`;
   }
   return undefined;
+}
+
+function cleanAuthUrl(url: URL) {
+  if (typeof window === 'undefined') return;
+  const cleanSearch = new URLSearchParams(url.search);
+  for (const key of ['code', 'state', 'error', 'error_code', 'error_description']) {
+    cleanSearch.delete(key);
+  }
+  const query = cleanSearch.toString();
+  window.history.replaceState(null, document.title, `${url.pathname}${query ? `?${query}` : ''}`);
+}
+
+async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 function getUserDisplayName(metadata: Record<string, unknown> | null | undefined) {
