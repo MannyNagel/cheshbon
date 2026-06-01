@@ -19,7 +19,7 @@ export const reviewSections = [
   ['section_overall', 'Overview', 'All-day practices'],
 ] as const;
 export const routines = [
-  ['routine_core', 'Year-Round Core', 'The stable siddur-like core for every day', 'core', 0],
+  ['routine_core', 'Weekly Core', 'The stable core for regular review days', 'core', 0],
   ['routine_yeshiva_zman', 'Yeshiva Zman', 'Sunday through Thursday seder structure', 'zman', 10],
   ['routine_summer', 'Summer', 'Summer rhythm and open-time structure', 'seasonal', 10],
   ['routine_shabbos', 'Shabbos', 'Shabbos review overlay', 'shabbos', 20],
@@ -53,6 +53,13 @@ export type PracticeSeed = {
 
 export const practices: PracticeSeed[] = [
   {
+    id: 'practice_sleep',
+    domainId: 'domain_health',
+    name: 'Sleep',
+    description: 'Notice the quality of sleep and how it affected the day.',
+    metrics: [{ id: 'metric_sleep_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 }],
+  },
+  {
     id: 'practice_modeh_ani',
     domainId: 'domain_foundations',
     name: 'Modeh Ani',
@@ -73,7 +80,7 @@ export const practices: PracticeSeed[] = [
   {
     id: 'practice_shacharit',
     domainId: 'domain_tefillah_brachot',
-    name: 'Shacharit',
+    name: 'Shacharis',
     metrics: [
       { id: 'metric_shacharit_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
       { id: 'metric_shacharit_on_time', name: 'On time', metricType: 'boolean' },
@@ -144,7 +151,7 @@ export const practices: PracticeSeed[] = [
   {
     id: 'practice_positivity',
     domainId: 'domain_middos',
-    name: 'Positivity',
+    name: 'Positive',
     metrics: [
       { id: 'metric_positivity_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 },
     ],
@@ -169,7 +176,7 @@ export const practices: PracticeSeed[] = [
   {
     id: 'practice_daily_avodah',
     domainId: 'domain_current_avodah',
-    name: "Tomorrow's avodah",
+    name: 'Daily Avodah',
     description: 'Choose one thing to work on tomorrow.',
     metrics: [
       { id: 'metric_daily_avodah_text', name: 'Current avodah', metricType: 'text' },
@@ -178,10 +185,28 @@ export const practices: PracticeSeed[] = [
   {
     id: 'practice_weekly_avodah',
     domainId: 'domain_current_avodah',
-    name: 'Weekly avodah',
+    name: 'Weekly Avodah',
     description: 'Choose one thing to work on this week.',
     metrics: [
       { id: 'metric_weekly_avodah_text', name: 'Current avodah', metricType: 'text' },
+    ],
+  },
+  {
+    id: 'practice_reflection',
+    domainId: 'domain_middos',
+    name: 'Reflection',
+    description: 'A short honest thought from the day.',
+    metrics: [
+      { id: 'metric_reflection_text', name: 'Reflection', metricType: 'text' },
+    ],
+  },
+  {
+    id: 'practice_daily_thoughts',
+    domainId: 'domain_foundations',
+    name: 'Daily Thoughts',
+    description: 'Anything from the day that feels worth remembering.',
+    metrics: [
+      { id: 'metric_daily_thoughts_text', name: 'Thoughts', metricType: 'text' },
     ],
   },
   {
@@ -238,26 +263,18 @@ export const practices: PracticeSeed[] = [
 ];
 
 export const routinePractices = [
-  ['rp_modeh_ani', 'routine_core', 'practice_modeh_ani', 'section_morning', 10, 1, null, null],
-  ['rp_no_snooze', 'routine_core', 'practice_no_snooze', 'section_morning', 20, 0, null, null],
-  ['rp_no_phone_bed', 'routine_core', 'practice_no_phone_bed', 'section_morning', 30, 0, null, null],
-  ['rp_shacharit', 'routine_core', 'practice_shacharit', 'section_morning', 40, 1, null, null],
-  ['rp_mincha', 'routine_core', 'practice_mincha', 'section_afternoon', 10, 1, null, null],
-  ['rp_maariv', 'routine_core', 'practice_maariv', 'section_night', 10, 1, null, null],
-  ['rp_shema', 'routine_core', 'practice_shema_al_hamitah', 'section_night', 20, 1, null, null],
+  ['rp_no_phone_bed', 'routine_core', 'practice_no_phone_bed', 'section_morning', 10, 0, null, null],
+  ['rp_modeh_ani', 'routine_core', 'practice_modeh_ani', 'section_morning', 20, 1, null, null],
+  ['rp_shacharit', 'routine_core', 'practice_shacharit', 'section_morning', 30, 1, null, null],
+  ['rp_sleep', 'routine_core', 'practice_sleep', 'section_night', 10, 0, null, null],
   ['rp_eating', 'routine_core', 'practice_eating', 'section_overall', 10, 0, null, 'Healthy, portioned, timed.'],
-  ['rp_phone', 'routine_core', 'practice_phone_computer', 'section_overall', 20, 0, null, 'Stayed off phone as much as possible and avoided distractions.'],
   ['rp_brachot', 'routine_core', 'practice_brachot', 'section_overall', 110, 1, null, 'Said brachot with kavannah and remembered after-brachot.'],
   ['rp_positivity', 'routine_core', 'practice_positivity', 'section_overall', 210, 0, null, null],
-  ['rp_complimentary', 'routine_core', 'practice_complimentary', 'section_overall', 220, 0, null, null],
-  ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 230, 0, null, null],
+  ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 220, 0, null, null],
+  ['rp_reflection', 'routine_core', 'practice_reflection', 'section_overall', 230, 0, null, null],
   ['rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0, null, null],
+  ['rp_daily_thoughts', 'routine_core', 'practice_daily_thoughts', 'section_overall', 320, 0, null, null],
   ['rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0, null, null],
-  ['rp_morning_seder', 'routine_yeshiva_zman', 'practice_morning_seder', 'section_morning', 50, 1, null, null],
-  ['rp_shiur', 'routine_yeshiva_zman', 'practice_shiur', 'section_afternoon', 20, 1, null, null],
-  ['rp_afternoon_seder', 'routine_yeshiva_zman', 'practice_afternoon_seder', 'section_afternoon', 30, 1, null, null],
-  ['rp_exercise_summer', 'routine_summer', 'practice_exercise', 'section_afternoon', 50, 0, null, null],
-  ['rp_low_capacity_sick', 'routine_sick', 'practice_low_capacity', 'section_overall', 10, 0, null, 'Name the realistic win, not the imagined perfect day.'],
 ] as const;
 
 export const blockerNames = [

@@ -172,6 +172,19 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
   await seedDatabase(db);
   await db.withTransactionAsync(async () => {
     await db.runAsync(
+      "UPDATE routine_templates SET name = 'Weekly Core', description = 'The stable core for regular review days', active = 1, priority = 0 WHERE id = 'routine_core'",
+    );
+    await db.runAsync("UPDATE routine_templates SET active = 1, priority = 20 WHERE id = 'routine_shabbos'");
+    await db.runAsync(
+      "UPDATE routine_templates SET active = 0 WHERE id IN ('routine_yeshiva_zman', 'routine_summer', 'routine_yom_tov', 'routine_travel', 'routine_sick')",
+    );
+    await db.runAsync(
+      "UPDATE routine_schedules SET start_date = NULL, end_date = NULL, days_of_week = '[0,1,2,3,4,5,6]' WHERE id = 'schedule_core_all'",
+    );
+    await db.runAsync(
+      "UPDATE routine_schedules SET start_date = NULL, end_date = NULL, days_of_week = '[6]' WHERE id = 'schedule_shabbos'",
+    );
+    await db.runAsync(
       "UPDATE review_sections SET name = 'Overview', description = 'All-day practices', sort_order = 40, active = 1 WHERE id = 'section_overall'",
     );
     await db.runAsync("UPDATE review_sections SET sort_order = 30, active = 1 WHERE id = 'section_night'");
@@ -199,15 +212,42 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
 
     await db.runAsync("UPDATE blockers SET active = 0 WHERE name IN ('Overeating', 'Yom Tov schedule')");
 
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_afternoon', sort_order = 10 WHERE id = 'rp_mincha'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_night', sort_order = 10 WHERE id = 'rp_maariv'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_night', sort_order = 20 WHERE id = 'rp_shema'");
+    await db.runAsync("UPDATE practices SET name = 'Positive' WHERE id = 'practice_positivity'");
+    await db.runAsync("UPDATE practices SET name = 'Shacharis' WHERE id = 'practice_shacharit'");
+    await db.runAsync("UPDATE practices SET name = 'Daily Avodah' WHERE id = 'practice_daily_avodah'");
+    await db.runAsync("UPDATE practices SET name = 'Weekly Avodah' WHERE id = 'practice_weekly_avodah'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 10, enabled = 1, archived_from = NULL WHERE id = 'rp_no_phone_bed'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 20, enabled = 1, archived_from = NULL WHERE id = 'rp_modeh_ani'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 30, enabled = 1, archived_from = NULL WHERE id = 'rp_shacharit'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_night', sort_order = 10, enabled = 1, archived_from = NULL WHERE id = 'rp_sleep'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 10 WHERE id = 'rp_eating'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 20 WHERE id = 'rp_phone'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 110 WHERE id = 'rp_brachot'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 210 WHERE id = 'rp_positivity'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 220 WHERE id = 'rp_complimentary'");
-    await db.runAsync("UPDATE routine_practices SET enabled = 0 WHERE id = 'rp_night_seder'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 220 WHERE id = 'rp_gratitude'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 230, enabled = 1, archived_from = NULL WHERE id = 'rp_reflection'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 310 WHERE id = 'rp_daily_avodah'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 320, enabled = 1, archived_from = NULL WHERE id = 'rp_daily_thoughts'");
+    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 310 WHERE id = 'rp_weekly_avodah'");
+    await db.runAsync(
+      `UPDATE routine_practices
+       SET enabled = 0,
+        archived_from = COALESCE(archived_from, '2026-06-01'),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (
+        'rp_no_snooze',
+        'rp_mincha',
+        'rp_maariv',
+        'rp_shema',
+        'rp_phone',
+        'rp_complimentary',
+        'rp_morning_seder',
+        'rp_shiur',
+        'rp_afternoon_seder',
+        'rp_exercise_summer',
+        'rp_low_capacity_sick',
+        'rp_night_seder'
+       )`,
+    );
     await db.runAsync("UPDATE metrics SET sort_order = 0 WHERE id = 'metric_shiur_applicable'");
     await db.runAsync("UPDATE metrics SET sort_order = 1 WHERE id = 'metric_shiur_completed'");
     await db.runAsync("UPDATE metrics SET sort_order = 2 WHERE id = 'metric_shiur_focus'");
@@ -264,7 +304,9 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync('UPDATE routine_practices SET required = 0');
     await db.runAsync('UPDATE metrics SET required = 0');
     await db.runAsync('UPDATE practices SET allow_note = 1 WHERE allow_note IS NULL');
-    await db.runAsync("UPDATE practices SET allow_note = 0 WHERE id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah')");
+    await db.runAsync(
+      "UPDATE practices SET allow_note = 0 WHERE id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah', 'practice_reflection', 'practice_daily_thoughts')",
+    );
     await db.runAsync(
       `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
        SELECT practice_id, blocker_id, 0
@@ -274,6 +316,10 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
         SELECT 'practice_daily_avodah' as practice_id, id as blocker_id FROM blockers WHERE active = 1
         UNION ALL
         SELECT 'practice_weekly_avodah' as practice_id, id as blocker_id FROM blockers WHERE active = 1
+        UNION ALL
+        SELECT 'practice_reflection' as practice_id, id as blocker_id FROM blockers WHERE active = 1
+        UNION ALL
+        SELECT 'practice_daily_thoughts' as practice_id, id as blocker_id FROM blockers WHERE active = 1
        )`,
     );
     await db.runAsync(
@@ -328,6 +374,44 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
        SELECT 'practice_weekly_avodah', id, 0
        FROM blockers
        WHERE active = 1`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+       SELECT 'practice_reflection', id, 0
+       FROM blockers
+       WHERE active = 1`,
+    );
+    await db.runAsync(
+      `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+       SELECT 'practice_daily_thoughts', id, 0
+       FROM blockers
+       WHERE active = 1`,
+    );
+    await db.runAsync(
+      `UPDATE practice_blockers
+       SET enabled = 0,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah', 'practice_reflection', 'practice_daily_thoughts')`,
+    );
+    await db.runAsync(
+      `UPDATE routine_practices
+       SET enabled = 0,
+        archived_from = COALESCE(archived_from, '2026-06-01'),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (
+        'rp_no_snooze',
+        'rp_mincha',
+        'rp_maariv',
+        'rp_shema',
+        'rp_phone',
+        'rp_complimentary',
+        'rp_morning_seder',
+        'rp_shiur',
+        'rp_afternoon_seder',
+        'rp_exercise_summer',
+        'rp_low_capacity_sick',
+        'rp_night_seder'
+       )`,
     );
   });
 }

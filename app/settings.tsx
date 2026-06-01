@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -225,6 +225,7 @@ export default function SettingsScreen() {
         onReload={load}
         setMessage={setMessage}
       />
+      <TutorialSection />
       <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
       <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
 
@@ -348,6 +349,54 @@ function ToggleButton({ label, selected, onPress }: { label: string; selected: b
     <Pressable accessibilityRole="switch" onPress={onPress} style={[styles.toggleButton, selected && styles.toggleButtonOn]}>
       <Text style={[styles.toggleButtonText, selected && styles.toggleButtonTextOn]}>{label}</Text>
     </Pressable>
+  );
+}
+
+function TutorialSection() {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.section}>
+      <Pressable accessibilityRole="button" onPress={() => setOpen((value) => !value)} style={styles.tutorialHeader}>
+        <View style={styles.reminderTitleRow}>
+          <BookOpen color={colors.blue} size={18} />
+          <Text style={styles.sectionTitle}>Tutorial</Text>
+        </View>
+        {open ? <ChevronUp color={colors.ink} size={19} /> : <ChevronDown color={colors.ink} size={19} />}
+      </Pressable>
+      {open ? (
+        <View style={styles.tutorialBox}>
+          <TutorialCard
+            title="The basic idea"
+            text="Cheshbon is a nightly review. You choose practices, answer them each night, and slowly notice patterns without turning the day into a score."
+          />
+          <TutorialCard
+            title="Practices"
+            text="A practice is one thing you review, like Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah."
+          />
+          <TutorialCard
+            title="Routines"
+            text="A routine decides when practices appear. The default setup keeps this simple: Weekly Core plus Shabbos."
+          />
+          <TutorialCard
+            title="Review sections"
+            text="Morning, Afternoon, Night, and Overview are the parts of the daily review. Use the Practices page to rearrange practices inside those sections."
+          />
+          <TutorialCard
+            title="Starter suggestion"
+            text="Begin with a small core. Keep what helps, remove what feels noisy, and add specialty routines later when the pattern is clear."
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function TutorialCard({ title, text }: { title: string; text: string }) {
+  return (
+    <View style={styles.tutorialCard}>
+      <Text style={styles.smallTitle}>{title}</Text>
+      <Text style={styles.tutorialText}>{text}</Text>
+    </View>
   );
 }
 
@@ -754,6 +803,36 @@ const styles = StyleSheet.create({
   },
   toggleButtonTextOn: {
     color: colors.green,
+  },
+  tutorialBox: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  tutorialCard: {
+    borderBottomColor: colors.softLine,
+    borderBottomWidth: 1,
+    gap: spacing.xs,
+    paddingBottom: spacing.md,
+  },
+  tutorialHeader: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+  },
+  tutorialText: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
   },
   disclosureHeader: {
     alignItems: 'center',
