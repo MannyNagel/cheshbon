@@ -1,6 +1,6 @@
-import { CalendarDays, CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
+import { Bell, CalendarDays, CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
@@ -31,6 +31,27 @@ export default function HomeScreen() {
     }, [today]),
   );
 
+  useEffect(() => {
+    if (!summary) return;
+    const body = morningReminderText(summary);
+    if (!body || typeof window === 'undefined' || !('Notification' in window)) return;
+    const hour = new Date().getHours();
+    if (hour < 5 || hour > 11) return;
+    const storageKey = `cheshbon_morning_reminder_${today}`;
+    if (window.localStorage.getItem(storageKey)) return;
+    const showNotification = () => {
+      window.localStorage.setItem(storageKey, 'shown');
+      new Notification('Good morning', { body });
+    };
+    if (Notification.permission === 'granted') {
+      showNotification();
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then((permission) => {
+        if (permission === 'granted') showNotification();
+      });
+    }
+  }, [summary, today]);
+
   if (loading || !summary) {
     return (
       <View style={styles.center}>
@@ -41,6 +62,7 @@ export default function HomeScreen() {
 
   const statusColor = summary.reviewComplete ? colors.green : colors.amber;
   const statusBackground = summary.reviewComplete ? colors.greenSoft : colors.amberSoft;
+  const hasMorningReminder = Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -69,7 +91,7 @@ export default function HomeScreen() {
         </View>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push(`/review/${today}`)}
+          onPress={() => openReview(today)}
           style={[styles.reviewButton, summary.reviewComplete && styles.editReviewButton]}
         >
           <NotebookPen color="#FFFFFF" size={18} />
@@ -93,12 +115,36 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {hasMorningReminder ? (
+        <View style={styles.reminderPanel}>
+          <View style={styles.reminderHeader}>
+            <Bell color={colors.blue} size={18} />
+            <Text style={styles.sectionTitle}>Good morning</Text>
+          </View>
+          {summary.morningReminder.dailyAvodah ? (
+            <Text style={styles.reminderText}>
+              Today you wanted to work on: <Text style={styles.reminderStrong}>{summary.morningReminder.dailyAvodah}</Text>
+            </Text>
+          ) : null}
+          {summary.morningReminder.markedPractices.length ? (
+            <View style={styles.markedList}>
+              <Text style={styles.reminderText}>Remember to focus on:</Text>
+              {summary.morningReminder.markedPractices.map((practice, index) => (
+                <Text key={practice} style={styles.markedItem}>
+                  {index + 1}. {practice}
+                </Text>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Past daily reviews</Text>
         <View style={styles.reviewPicker}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push(`/review/${yesterday}`)}
+            onPress={() => openReview(yesterday)}
             style={styles.secondaryButton}
           >
             <CalendarDays color={colors.ink} size={17} />
@@ -114,7 +160,7 @@ export default function HomeScreen() {
             />
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push(`/review/${reviewDate.trim() || yesterday}`)}
+              onPress={() => openReview(reviewDate.trim() || yesterday)}
               style={styles.secondaryButton}
             >
               <Text style={styles.secondaryButtonText}>Open date</Text>
@@ -155,6 +201,24 @@ export default function HomeScreen() {
       </View>
     </ScrollView>
   );
+}
+
+function openReview(date: string) {
+  router.push({ pathname: '/review/[date]', params: { date } });
+}
+
+function morningReminderText(summary: HomeSummary) {
+  const lines: string[] = [];
+  if (summary.morningReminder.dailyAvodah) {
+    lines.push(`Today you wanted to work on: ${summary.morningReminder.dailyAvodah}`);
+  }
+  if (summary.morningReminder.markedPractices.length) {
+    lines.push('Remember to focus on the following practices today:');
+    summary.morningReminder.markedPractices.forEach((practice, index) => {
+      lines.push(`${index + 1}. ${practice}`);
+    });
+  }
+  return lines.join('\n');
 }
 
 function GoalCard({ title, text, empty }: { title: string; text: string | null; empty: string }) {
@@ -238,6 +302,16 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     textTransform: 'uppercase',
   },
+  markedItem: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 22,
+    textAlign: 'left',
+  },
+  markedList: {
+    gap: spacing.xs,
+  },
   gratitudeDate: {
     color: colors.green,
     fontSize: 13,
@@ -287,6 +361,29 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 22,
     fontWeight: '900',
+    textAlign: 'left',
+  },
+  reminderHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  reminderPanel: {
+    backgroundColor: colors.blueSoft,
+    borderColor: '#BFD2F7',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  reminderStrong: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  reminderText: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: 'left',
   },
   primaryPanel: {

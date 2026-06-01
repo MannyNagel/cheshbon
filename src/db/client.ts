@@ -35,6 +35,8 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
   await ensureColumn(db, 'practices', 'allow_note', 'INTEGER NOT NULL DEFAULT 1');
+  await ensureColumn(db, 'practices', 'markable', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'daily_entries', 'remind_tomorrow', 'INTEGER NOT NULL DEFAULT 0');
   const existing = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM domains');
   if (!existing?.count) {
     await seedDatabase(db);

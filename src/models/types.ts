@@ -81,6 +81,7 @@ export type NightlyReviewItem = {
   metrics: Metric[];
   allowedBlockerIds?: string[] | null;
   allowNote: boolean;
+  markable: boolean;
 };
 
 export type NightlyReviewSection = ReviewSection & {
@@ -99,6 +100,7 @@ export type EntryDraft = {
   practiceId: string;
   status?: EntryStatus | null;
   note?: string | null;
+  remindTomorrow?: boolean | null;
   metricValues: Record<string, MetricValueDraft>;
   blockerIds: string[];
 };

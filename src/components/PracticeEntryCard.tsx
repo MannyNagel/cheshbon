@@ -1,4 +1,4 @@
-import { StickyNote } from 'lucide-react-native';
+import { Bell, StickyNote } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -20,6 +20,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
       practiceId: item.practiceId,
       status: null,
       note: null,
+      remindTomorrow: false,
       metricValues: {},
       blockerIds: [],
     };
@@ -32,6 +33,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
         ...entry,
         status: 'not_applicable',
         note: null,
+        remindTomorrow: false,
         blockerIds: [],
         metricValues: {
           [metricValue.metricId]: metricValue,
@@ -74,6 +76,16 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
           <Text style={styles.title}>{item.displayName}</Text>
           <Text style={styles.meta}>{item.domainName}</Text>
         </View>
+        {item.markable ? (
+          <Pressable
+            accessibilityRole="switch"
+            onPress={() => onChange({ ...entry, remindTomorrow: !entry.remindTomorrow })}
+            style={[styles.reminderButton, entry.remindTomorrow && styles.reminderButtonOn]}
+          >
+            <Bell color={entry.remindTomorrow ? colors.blue : colors.muted} size={15} />
+            <Text style={[styles.reminderText, entry.remindTomorrow && styles.reminderTextOn]}>Remember</Text>
+          </Pressable>
+        ) : null}
       </View>
       {item.helpText ? <Text style={styles.help}>{item.helpText}</Text> : null}
       <View style={styles.metrics}>
@@ -174,6 +186,28 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: '700',
+  },
+  reminderButton: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+  },
+  reminderButtonOn: {
+    backgroundColor: colors.blueSoft,
+    borderColor: colors.blue,
+  },
+  reminderText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  reminderTextOn: {
+    color: colors.blue,
   },
   note: {
     borderColor: colors.line,

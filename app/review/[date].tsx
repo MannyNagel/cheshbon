@@ -5,5 +5,6 @@ import { todayIsoDate } from '@/src/utils/dates';
 
 export default function DatedReview() {
   const params = useLocalSearchParams<{ date?: string }>();
-  return <NightlyReviewScreen initialDate={params.date ?? todayIsoDate()} />;
+  const date = params.date ?? todayIsoDate();
+  return <NightlyReviewScreen key={date} initialDate={date} />;
 }

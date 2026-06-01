@@ -1,10 +1,17 @@
-import { CirclePlus, Pencil, Save, Trash2, X } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, CirclePlus, Pencil, Save, Trash2, X } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
-import { createTask, getTaskFormOptions, getTasksForManagement, removeTaskFromTodayForward, updateTask } from '@/src/repositories/cheshbonRepo';
+import {
+  createTask,
+  getTaskFormOptions,
+  getTasksForManagement,
+  moveTaskWithinSection,
+  removeTaskFromTodayForward,
+  updateTask,
+} from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 
 type MetricKind = 'completed' | 'quality' | 'number' | 'text';
@@ -22,6 +29,7 @@ type TaskRow = {
   domainId: string;
   domainName: string;
   allowNote: number;
+  markable: number;
   routineId: string;
   routineName: string;
   reviewSectionId: string;
@@ -52,6 +60,7 @@ const emptyForm = {
   metricKind: 'quality' as MetricKind,
   enabled: true,
   allowNote: true,
+  markable: false,
   blockersEnabled: true,
   blockerIds: [] as string[],
 };
@@ -111,15 +120,23 @@ export default function PracticesScreen() {
     }
   }, [options, params.mode, params.routineId]);
 
-  const [sortBy, setSortBy] = useState<'routine' | 'domain' | 'section' | 'name'>('routine');
+  const [sortBy, setSortBy] = useState<'routine' | 'domain' | 'section' | 'order' | 'name'>('routine');
   const title = mode === 'add' ? 'Add Practice' : mode === 'edit' ? 'Edit Practice' : 'Practices';
   const sortedPractices = useMemo(() => {
     const copy = [...tasks];
     return copy.sort((a, b) => {
       if (sortBy === 'domain') return a.domainName.localeCompare(b.domainName) || a.name.localeCompare(b.name);
-      if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.name.localeCompare(b.name);
+      if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+      if (sortBy === 'order') {
+        return (
+          a.routineName.localeCompare(b.routineName) ||
+          sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) ||
+          a.sortOrder - b.sortOrder ||
+          a.name.localeCompare(b.name)
+        );
+      }
       if (sortBy === 'name') return a.name.localeCompare(b.name);
-      return a.routineName.localeCompare(b.routineName) || a.reviewSectionName.localeCompare(b.reviewSectionName) || a.sortOrder - b.sortOrder;
+      return a.routineName.localeCompare(b.routineName) || sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder;
     });
   }, [sortBy, tasks]);
   const groupedPractices = useMemo(() => {
@@ -130,6 +147,8 @@ export default function PracticesScreen() {
           ? practice.domainName
           : sortBy === 'section'
             ? practice.reviewSectionName
+            : sortBy === 'order'
+              ? `${practice.routineName} · ${practice.reviewSectionName}`
             : sortBy === 'name'
               ? practice.name[0]?.toUpperCase() || '#'
               : practice.routineName;
@@ -168,6 +187,7 @@ export default function PracticesScreen() {
       metricKind: metricTypeToKind(task.metricType),
       enabled: task.enabled === 1,
       allowNote: task.allowNote === 1,
+      markable: task.markable === 1,
       blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
       blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
     });
@@ -223,6 +243,20 @@ export default function PracticesScreen() {
     }
   }
 
+  async function moveTask(task: TaskRow, direction: 'up' | 'down') {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await moveTaskWithinSection(task.routinePracticeId, direction);
+      setMessage(await syncedMessage('Practice order updated.'));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not move practice');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!options) {
     return (
       <View style={styles.center}>
@@ -271,6 +305,7 @@ export default function PracticesScreen() {
                 { id: 'routine', label: 'Routine' },
                 { id: 'domain', label: 'Domain' },
                 { id: 'section', label: 'Review Section' },
+                { id: 'order', label: 'Order' },
                 { id: 'name', label: 'Name' },
               ]}
               selectedId={sortBy}
@@ -291,6 +326,28 @@ export default function PracticesScreen() {
                       {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} | {task.enabled ? 'active' : 'hidden'}
                     </Text>
                   </View>
+                  {sortBy === 'order' ? (
+                    <View style={styles.orderButtons}>
+                      <Pressable
+                        accessibilityLabel={`Move ${task.name} up`}
+                        accessibilityRole="button"
+                        disabled={saving}
+                        onPress={() => moveTask(task, 'up')}
+                        style={styles.orderButton}
+                      >
+                        <ArrowUp color={colors.ink} size={16} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Move ${task.name} down`}
+                        accessibilityRole="button"
+                        disabled={saving}
+                        onPress={() => moveTask(task, 'down')}
+                        style={styles.orderButton}
+                      >
+                        <ArrowDown color={colors.ink} size={16} />
+                      </Pressable>
+                    </View>
+                  ) : null}
                   <Pressable accessibilityRole="button" onPress={() => startEdit(task)} style={styles.editButton}>
                     <Pencil color={colors.ink} size={17} />
                     <Text style={styles.editText}>Edit</Text>
@@ -410,6 +467,7 @@ function TaskForm({
       </Field>
       <View style={styles.optionRow}>
         <Toggle label={form.allowNote ? 'Allow note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
+        <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
         <Toggle label={form.enabled ? 'Active' : 'Hidden'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
       </View>
     </View>
@@ -570,6 +628,20 @@ const styles = StyleSheet.create({
   choiceText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   choiceTextSelected: { color: colors.blue },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  orderButton: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  orderButtons: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
   toggle: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   toggleOn: { backgroundColor: colors.greenSoft, borderColor: colors.green },
   toggleText: { color: colors.ink, fontSize: 14, fontWeight: '800' },

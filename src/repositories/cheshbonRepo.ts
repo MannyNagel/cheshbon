@@ -37,6 +37,10 @@ export type HomeSummary = {
   streak: number;
   reviewedPractices: number;
   currentAvodah: Array<{ practiceId: string; practiceName: string; date: string; text: string }>;
+  morningReminder: {
+    dailyAvodah: string | null;
+    markedPractices: string[];
+  };
   recentGratitude: Array<{ date: string; text: string }>;
 };
 
@@ -81,7 +85,44 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     streak: await getCurrentReviewStreak(),
     reviewedPractices: reviewed?.count ?? 0,
     currentAvodah: await getCurrentAvodahSummary(db, reviewDate),
+    morningReminder: await getMorningReminderSummary(db, reviewDate),
     recentGratitude: recentGratitude.map((row) => ({ date: row.entry_date, text: row.gratitude_text })),
+  };
+}
+
+async function getMorningReminderSummary(db: Awaited<ReturnType<typeof getDb>>, reviewDate: string) {
+  const yesterday = addDaysIso(reviewDate, -1);
+  const dailyAvodah = await db.getFirstAsync<{ text: string | null }>(
+    `SELECT COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as text
+     FROM daily_entries de
+     LEFT JOIN metrics m ON m.practice_id = de.practice_id
+      AND m.metric_type = 'text'
+      AND m.active = 1
+     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.metric_id = m.id
+     WHERE de.user_id = ?
+      AND de.practice_id = 'practice_daily_avodah'
+      AND de.entry_date = ?
+      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+     LIMIT 1`,
+    LOCAL_USER_ID,
+    yesterday,
+  );
+  const markedPractices = await db.getAllAsync<{ name: string }>(
+    `SELECT DISTINCT p.name
+     FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
+     WHERE de.user_id = ?
+      AND de.entry_date = ?
+      AND de.remind_tomorrow = 1
+      AND p.active = 1
+     ORDER BY p.name`,
+    LOCAL_USER_ID,
+    yesterday,
+  );
+  return {
+    dailyAvodah: dailyAvodah?.text?.trim() || null,
+    markedPractices: markedPractices.map((practice) => practice.name),
   };
 }
 
@@ -211,6 +252,7 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     practice_id: string;
     status: string | null;
     note: string | null;
+    remind_tomorrow: number | null;
   }>('SELECT * FROM daily_entries WHERE user_id = ? AND entry_date = ?', LOCAL_USER_ID, reviewDate);
   const entryIds = entries.map((entry) => entry.id);
   const metricRows = entryIds.length
@@ -240,6 +282,7 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
       practiceId: entry.practice_id,
       status: entry.status as EntryDraft['status'],
       note: entry.note,
+      remindTomorrow: entry.remind_tomorrow === 1,
       metricValues: {},
       blockerIds: [],
     };
@@ -321,12 +364,13 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
     for (const entry of Object.values(draft.entries)) {
       const entryId = makeId('entry');
       await db.runAsync(
-        `INSERT INTO daily_entries (id, user_id, review_session_id, practice_id, entry_date, status, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO daily_entries (id, user_id, review_session_id, practice_id, entry_date, status, note, remind_tomorrow)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id, practice_id, entry_date) DO UPDATE SET
           review_session_id = excluded.review_session_id,
           status = excluded.status,
           note = excluded.note,
+          remind_tomorrow = excluded.remind_tomorrow,
           updated_at = CURRENT_TIMESTAMP`,
         entryId,
         LOCAL_USER_ID,
@@ -335,6 +379,7 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
         reviewDate,
         entry.status ?? null,
         entry.note ?? null,
+        entry.remindTomorrow ? 1 : 0,
       );
       const persistedEntry = await db.getFirstAsync<{ id: string }>(
         'SELECT id FROM daily_entries WHERE user_id = ? AND practice_id = ? AND entry_date = ?',
@@ -578,6 +623,7 @@ export async function getTasksForManagement() {
     domainId: string;
     domainName: string;
     allowNote: number;
+    markable: number;
     routineId: string;
     routineName: string;
     reviewSectionId: string;
@@ -593,6 +639,7 @@ export async function getTasksForManagement() {
       p.name,
       p.description,
       p.allow_note as allowNote,
+      p.markable,
       d.id as domainId,
       d.name as domainName,
       rt.id as routineId,
@@ -700,6 +747,7 @@ export async function updateTask(input: {
   metricKind: 'completed' | 'quality' | 'number' | 'text';
   enabled: boolean;
   allowNote: boolean;
+  markable: boolean;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -711,15 +759,24 @@ export async function updateTask(input: {
         : input.metricKind === 'number'
           ? { name: 'Number', type: 'number', min: null, max: null }
           : { name: 'Text', type: 'text', min: null, max: null };
-  const sortOrder = await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
+  const currentPlacement = await db.getFirstAsync<{
+    routine_template_id: string;
+    review_section_id: string;
+    sort_order: number;
+  }>('SELECT routine_template_id, review_section_id, sort_order FROM routine_practices WHERE id = ?', input.routinePracticeId);
+  const sortOrder =
+    currentPlacement?.routine_template_id === input.routineId && currentPlacement.review_section_id === input.reviewSectionId
+      ? currentPlacement.sort_order
+      : await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       input.name.trim(),
       input.description?.trim() || null,
       input.domainId,
       input.allowNote ? 1 : 0,
+      input.markable ? 1 : 0,
       input.practiceId,
     );
     await db.runAsync(
@@ -762,6 +819,9 @@ export async function updateTask(input: {
     if (!input.allowNote) {
       await db.runAsync('UPDATE daily_entries SET note = NULL, updated_at = CURRENT_TIMESTAMP WHERE practice_id = ?', input.practiceId);
     }
+    if (!input.markable) {
+      await db.runAsync('UPDATE daily_entries SET remind_tomorrow = 0, updated_at = CURRENT_TIMESTAMP WHERE practice_id = ?', input.practiceId);
+    }
   });
 }
 
@@ -772,7 +832,9 @@ export async function createTask(input: {
   routineId: string;
   reviewSectionId: string;
   metricKind: 'completed' | 'quality' | 'number' | 'text';
+  enabled?: boolean;
   allowNote: boolean;
+  markable: boolean;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -791,13 +853,14 @@ export async function createTask(input: {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note, markable) VALUES (?, ?, ?, ?, ?, ?, ?)',
       practiceId,
       LOCAL_USER_ID,
       input.domainId,
       input.name.trim(),
       input.description?.trim() || null,
       input.allowNote ? 1 : 0,
+      input.markable ? 1 : 0,
     );
     await db.runAsync(
       `INSERT INTO metrics (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order)
@@ -812,14 +875,15 @@ export async function createTask(input: {
     );
     await db.runAsync(
       `INSERT INTO routine_practices
-        (id, routine_template_id, practice_id, review_section_id, sort_order, required)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (id, routine_template_id, practice_id, review_section_id, sort_order, required, enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       routinePracticeId,
       input.routineId,
       practiceId,
       input.reviewSectionId,
       sortOrder,
       0,
+      input.enabled === false ? 0 : 1,
     );
     await replacePracticeBlockers(db, practiceId, input.blockerIds);
   });
@@ -850,6 +914,50 @@ export async function removeTaskFromTodayForward(routinePracticeId: string, from
         await db.runAsync('DELETE FROM daily_entries WHERE id = ?', entry.id);
       }
     }
+  });
+}
+
+export async function moveTaskWithinSection(routinePracticeId: string, direction: 'up' | 'down') {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    const current = await db.getFirstAsync<{
+      id: string;
+      routine_template_id: string;
+      review_section_id: string;
+      sort_order: number;
+    }>(
+      'SELECT id, routine_template_id, review_section_id, sort_order FROM routine_practices WHERE id = ? AND archived_from IS NULL',
+      routinePracticeId,
+    );
+    if (!current) return;
+
+    const operator = direction === 'up' ? '<' : '>';
+    const order = direction === 'up' ? 'DESC' : 'ASC';
+    const neighbor = await db.getFirstAsync<{ id: string; sort_order: number }>(
+      `SELECT id, sort_order
+       FROM routine_practices
+       WHERE routine_template_id = ?
+        AND review_section_id = ?
+        AND archived_from IS NULL
+        AND sort_order ${operator} ?
+       ORDER BY sort_order ${order}
+       LIMIT 1`,
+      current.routine_template_id,
+      current.review_section_id,
+      current.sort_order,
+    );
+    if (!neighbor) return;
+
+    await db.runAsync(
+      'UPDATE routine_practices SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      neighbor.sort_order,
+      current.id,
+    );
+    await db.runAsync(
+      'UPDATE routine_practices SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      current.sort_order,
+      neighbor.id,
+    );
   });
 }
 

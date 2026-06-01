@@ -1,6 +1,6 @@
 import { CalendarDays, CheckCircle2, Save, SkipBack, SkipForward } from 'lucide-react-native';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ReviewSection } from '@/src/components/ReviewSection';
@@ -26,6 +26,10 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const [savedDates, setSavedDates] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
   const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
+
+  useEffect(() => {
+    setReviewDate(initialDate);
+  }, [initialDate]);
 
   const load = useCallback(async () => {
     setLoading(true);
