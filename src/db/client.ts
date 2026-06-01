@@ -168,7 +168,7 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
   });
 }
 
-async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
+export async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
   await seedDatabase(db);
   await db.withTransactionAsync(async () => {
     await db.runAsync(
@@ -189,6 +189,9 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     );
     await db.runAsync("UPDATE review_sections SET sort_order = 30, active = 1 WHERE id = 'section_night'");
     await db.runAsync("UPDATE review_sections SET active = 0 WHERE id = 'section_evening'");
+    await db.runAsync(
+      "UPDATE domains SET name = 'Other', description = 'General thoughts, reflections, and uncategorized practices', active = 1 WHERE id = 'domain_other'",
+    );
 
     await db.runAsync(
       "UPDATE routine_schedules SET start_date = NULL, end_date = NULL, days_of_week = '[0,1,2,3,4]' WHERE id = 'schedule_yeshiva_zman'",
@@ -216,15 +219,18 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     await db.runAsync("UPDATE practices SET name = 'Shacharis' WHERE id = 'practice_shacharit'");
     await db.runAsync("UPDATE practices SET name = 'Daily Avodah' WHERE id = 'practice_daily_avodah'");
     await db.runAsync("UPDATE practices SET name = 'Weekly Avodah' WHERE id = 'practice_weekly_avodah'");
+    await db.runAsync(
+      "UPDATE practices SET name = 'Thoughts and Reflections', description = 'Anything from the day that feels worth remembering or thinking through.', domain_id = 'domain_other', active = 1 WHERE id = 'practice_daily_thoughts'",
+    );
+    await db.runAsync("UPDATE metrics SET name = 'Thoughts and reflections' WHERE id = 'metric_daily_thoughts_text'");
+    await db.runAsync("UPDATE practices SET active = 0 WHERE id IN ('practice_sleep', 'practice_reflection')");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 10, enabled = 1, archived_from = NULL WHERE id = 'rp_no_phone_bed'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 20, enabled = 1, archived_from = NULL WHERE id = 'rp_modeh_ani'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_morning', sort_order = 30, enabled = 1, archived_from = NULL WHERE id = 'rp_shacharit'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_night', sort_order = 10, enabled = 1, archived_from = NULL WHERE id = 'rp_sleep'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 10 WHERE id = 'rp_eating'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 110 WHERE id = 'rp_brachot'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 210 WHERE id = 'rp_positivity'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 220 WHERE id = 'rp_gratitude'");
-    await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 230, enabled = 1, archived_from = NULL WHERE id = 'rp_reflection'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 310 WHERE id = 'rp_daily_avodah'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 320, enabled = 1, archived_from = NULL WHERE id = 'rp_daily_thoughts'");
     await db.runAsync("UPDATE routine_practices SET review_section_id = 'section_overall', sort_order = 310 WHERE id = 'rp_weekly_avodah'");
@@ -238,8 +244,10 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
         'rp_mincha',
         'rp_maariv',
         'rp_shema',
+        'rp_sleep',
         'rp_phone',
         'rp_complimentary',
+        'rp_reflection',
         'rp_morning_seder',
         'rp_shiur',
         'rp_afternoon_seder',
@@ -403,8 +411,10 @@ async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
         'rp_mincha',
         'rp_maariv',
         'rp_shema',
+        'rp_sleep',
         'rp_phone',
         'rp_complimentary',
+        'rp_reflection',
         'rp_morning_seder',
         'rp_shiur',
         'rp_afternoon_seder',

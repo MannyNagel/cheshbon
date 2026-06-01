@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
-import { getDb } from '@/src/db/client';
+import { getDb, syncSeedUpdates } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
 import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 import type {
@@ -1156,7 +1156,7 @@ export async function createBlocker(input: { name: string; description?: string 
        SET enabled = 0,
         updated_at = CURRENT_TIMESTAMP
        WHERE blocker_id = ?
-        AND practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah')`,
+        AND practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah', 'practice_daily_thoughts')`,
       id,
     );
   });
@@ -1229,6 +1229,7 @@ export async function importAllData(exportJson: string) {
         }
       }
     });
+    await syncSeedUpdates(db);
     await clearRequiredFlags(db);
     await normalizeQualityScale(db);
     await normalizeReviewCompletionState(db);

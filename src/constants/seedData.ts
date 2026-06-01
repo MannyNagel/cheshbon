@@ -10,6 +10,7 @@ export const domains = [
   ['domain_family', 'Marriage / Family', 'Home, family, and close relationships'],
   ['domain_foundations', 'Morning & Night Foundations', 'Anchors at the edges of the day'],
   ['domain_current_avodah', 'Current Avodah', 'The present point of growth for today and this week'],
+  ['domain_other', 'Other', 'General thoughts, reflections, and uncategorized practices'],
   ['domain_seasonal', 'Seasonal Avodah', 'Avodah that changes by calendar and context'],
 ] as const;
 export const reviewSections = [
@@ -202,11 +203,11 @@ export const practices: PracticeSeed[] = [
   },
   {
     id: 'practice_daily_thoughts',
-    domainId: 'domain_foundations',
-    name: 'Daily Thoughts',
-    description: 'Anything from the day that feels worth remembering.',
+    domainId: 'domain_other',
+    name: 'Thoughts and Reflections',
+    description: 'Anything from the day that feels worth remembering or thinking through.',
     metrics: [
-      { id: 'metric_daily_thoughts_text', name: 'Thoughts', metricType: 'text' },
+      { id: 'metric_daily_thoughts_text', name: 'Thoughts and reflections', metricType: 'text' },
     ],
   },
   {
@@ -266,12 +267,10 @@ export const routinePractices = [
   ['rp_no_phone_bed', 'routine_core', 'practice_no_phone_bed', 'section_morning', 10, 0, null, null],
   ['rp_modeh_ani', 'routine_core', 'practice_modeh_ani', 'section_morning', 20, 1, null, null],
   ['rp_shacharit', 'routine_core', 'practice_shacharit', 'section_morning', 30, 1, null, null],
-  ['rp_sleep', 'routine_core', 'practice_sleep', 'section_night', 10, 0, null, null],
   ['rp_eating', 'routine_core', 'practice_eating', 'section_overall', 10, 0, null, 'Healthy, portioned, timed.'],
   ['rp_brachot', 'routine_core', 'practice_brachot', 'section_overall', 110, 1, null, 'Said brachot with kavannah and remembered after-brachot.'],
   ['rp_positivity', 'routine_core', 'practice_positivity', 'section_overall', 210, 0, null, null],
   ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 220, 0, null, null],
-  ['rp_reflection', 'routine_core', 'practice_reflection', 'section_overall', 230, 0, null, null],
   ['rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0, null, null],
   ['rp_daily_thoughts', 'routine_core', 'practice_daily_thoughts', 'section_overall', 320, 0, null, null],
   ['rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0, null, null],

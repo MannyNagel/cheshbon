@@ -367,11 +367,11 @@ function TutorialSection() {
         <View style={styles.tutorialBox}>
           <TutorialCard
             title="The basic idea"
-            text="Cheshbon is a nightly review. You choose practices, answer them each night, and slowly notice patterns without turning the day into a score."
+            text="Cheshbon is a nightly review. You choose practices, answer them each night, and slowly notice patterns over time."
           />
           <TutorialCard
             title="Practices"
-            text="A practice is one thing you review, like Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah."
+            text="A practice is one thing you review. When creating one, choose its metric, routine, part of day, domain, blockers, whether notes are allowed, whether it is active, and optional reminder settings."
           />
           <TutorialCard
             title="Routines"
