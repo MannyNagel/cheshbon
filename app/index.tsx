@@ -35,21 +35,38 @@ export default function HomeScreen() {
     if (!summary) return;
     const body = morningReminderText(summary);
     if (!body || typeof window === 'undefined' || !('Notification' in window)) return;
-    const hour = new Date().getHours();
-    if (hour < 5 || hour > 11) return;
     const storageKey = `cheshbon_morning_reminder_${today}`;
-    if (window.localStorage.getItem(storageKey)) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     const showNotification = () => {
+      if (window.localStorage.getItem(storageKey)) return;
       window.localStorage.setItem(storageKey, 'shown');
       new Notification('Good morning', { body });
     };
-    if (Notification.permission === 'granted') {
-      showNotification();
-    } else if (Notification.permission === 'default') {
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') showNotification();
-      });
-    }
+
+    const attemptNotification = () => {
+      const now = new Date();
+      const target = morningReminderTarget(now);
+      const cutoff = new Date(target);
+      cutoff.setHours(12, 0, 0, 0);
+      if (now < target) {
+        timer = setTimeout(attemptNotification, target.getTime() - now.getTime());
+        return;
+      }
+      if (now > cutoff || window.localStorage.getItem(storageKey)) return;
+      if (Notification.permission === 'granted') {
+        showNotification();
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted') showNotification();
+        });
+      }
+    };
+
+    attemptNotification();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, [summary, today]);
 
   if (loading || !summary) {
@@ -219,6 +236,12 @@ function morningReminderText(summary: HomeSummary) {
     });
   }
   return lines.join('\n');
+}
+
+function morningReminderTarget(now: Date) {
+  const target = new Date(now);
+  target.setHours(5, 30, 0, 0);
+  return target;
 }
 
 function GoalCard({ title, text, empty }: { title: string; text: string | null; empty: string }) {
