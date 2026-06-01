@@ -1,17 +1,15 @@
-import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, Download, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import {
   deactivateDomain,
-  exportAllData,
   createBlocker,
   createDomain,
   getBlockerEditorRows,
   getDomainEditorRows,
   getReminderPreferences,
-  shareExportJson,
   updateBlocker,
   updateDomain,
   updateReminderPreferences,
@@ -39,7 +37,6 @@ export default function SettingsScreen() {
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
   const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
-  const [exportText, setExportText] = useState('');
   const [authMode, setAuthMode] = useState<'signIn' | 'create' | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -108,17 +105,6 @@ export default function SettingsScreen() {
       });
   }, [cloudStatus, load]);
 
-  async function previewExport() {
-    setExportText(await exportAllData());
-    setMessage('Export generated below.');
-  }
-
-  async function shareExport() {
-    const result = await shareExportJson();
-    setExportText(result.json);
-    setMessage(`Export ready: ${result.path}`);
-  }
-
   async function runCloudAction(action: () => Promise<string | null | void>, successMessage: string) {
     setBusy(true);
     setMessage(null);
@@ -145,7 +131,7 @@ export default function SettingsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>Cloud sync, seeded library, and local export controls.</Text>
+        <Text style={styles.subtitle}>Account, tutorial, domains, blockers, and reminders.</Text>
       </View>
 
       <View style={styles.cloudBox}>
@@ -239,28 +225,17 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      <View style={styles.actions}>
-        <ActionButton icon={<RefreshCw color={colors.ink} size={17} />} label="Preview export" onPress={previewExport} />
-        <ActionButton icon={<Download color={colors.ink} size={17} />} label="Share JSON" onPress={shareExport} />
-      </View>
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
+      <TutorialSection />
+      <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
+      <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
       <ReminderSettings
         preferences={reminderPreferences}
         onChange={setReminderPreferences}
         onReload={load}
         setMessage={setMessage}
       />
-      <TutorialSection />
-      <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
-      <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
-
-      {exportText ? (
-        <View style={styles.exportBox}>
-          <Text style={styles.sectionTitle}>Export JSON</Text>
-          <TextInput multiline editable={false} style={styles.exportText} value={exportText} />
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -949,22 +924,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 52,
     paddingHorizontal: spacing.md,
-  },
-  exportBox: {
-    gap: spacing.sm,
-  },
-  exportText: {
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.ink,
-    fontFamily: 'monospace',
-    fontSize: 12,
-    minHeight: 240,
-    padding: spacing.md,
-    textAlign: 'left',
-    textAlignVertical: 'top',
-    writingDirection: 'ltr',
   },
 });

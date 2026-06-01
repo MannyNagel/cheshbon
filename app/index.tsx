@@ -1,7 +1,7 @@
 import { Bell, CalendarDays, CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import { getHomeSummary, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
@@ -12,7 +12,6 @@ export default function HomeScreen() {
   const yesterday = addDaysIso(today, -1);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
-  const [reviewDate, setReviewDate] = useState(yesterday);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -122,18 +121,12 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <View style={styles.statHeader}>
-            <Flame color={colors.green} size={18} />
-            <Text style={styles.statValue}>{summary.streak}</Text>
-          </View>
-          <Text style={styles.statLabel}>day streak</Text>
+      <View style={styles.statBox}>
+        <View style={styles.statHeader}>
+          <Flame color={colors.green} size={18} />
+          <Text style={styles.statValue}>{summary.streak}</Text>
         </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statValue}>{summary.reviewedPractices}</Text>
-          <Text style={styles.statLabel}>all-time practices reviewed</Text>
-        </View>
+        <Text style={styles.statLabel}>day streak</Text>
       </View>
 
       {hasMorningReminder ? (
@@ -162,32 +155,14 @@ export default function HomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Past daily reviews</Text>
-        <View style={styles.reviewPicker}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => openReview(yesterday)}
-            style={styles.secondaryButton}
-          >
-            <CalendarDays color={colors.ink} size={17} />
-            <Text style={styles.secondaryButtonText}>Yesterday</Text>
-          </Pressable>
-          <View style={styles.dateJump}>
-            <TextInput
-              onChangeText={setReviewDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.muted}
-              style={styles.dateInput}
-              value={reviewDate}
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => openReview(reviewDate.trim() || yesterday)}
-              style={styles.secondaryButton}
-            >
-              <Text style={styles.secondaryButtonText}>Open date</Text>
-            </Pressable>
-          </View>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => openReview(yesterday)}
+          style={styles.secondaryButton}
+        >
+          <CalendarDays color={colors.ink} size={17} />
+          <Text style={styles.secondaryButtonText}>Go to yesterday&apos;s review</Text>
+        </Pressable>
       </View>
 
       {summary.currentAvodah.length ? (
@@ -219,6 +194,31 @@ export default function HomeScreen() {
         ) : (
           <Text style={styles.emptyText}>No recent gratitude notes yet.</Text>
         )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Thought journal</Text>
+        <Text style={styles.sectionMeta}>Previous days</Text>
+        {summary.thoughtJournal.length ? (
+          <View style={styles.journalList}>
+            {summary.thoughtJournal.map((item) => (
+              <View key={`${item.date}-${item.practiceName}-${item.text}`} style={styles.journalItem}>
+                <View style={styles.journalHeader}>
+                  <Text style={styles.gratitudeDate}>{monthDay(item.date)}</Text>
+                  <Text style={styles.journalPractice}>{item.practiceName}</Text>
+                </View>
+                <Text style={styles.gratitudeText}>{item.text}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>No previous thoughts yet.</Text>
+        )}
+      </View>
+
+      <View style={styles.statBox}>
+        <Text style={styles.statValue}>{summary.reviewedPractices}</Text>
+        <Text style={styles.statLabel}>all-time practices reviewed</Text>
       </View>
     </ScrollView>
   );
@@ -446,32 +446,30 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'left',
   },
-  dateInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.ink,
-    flex: 1,
-    fontSize: 15,
-    minHeight: 44,
-    minWidth: 150,
-    paddingHorizontal: spacing.md,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  dateJump: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    minWidth: 220,
-  },
-  reviewPicker: {
+  journalHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  journalItem: {
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+  },
+  journalList: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+  },
+  journalPractice: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'left',
   },
   secondaryButton: {
     alignItems: 'center',
@@ -526,10 +524,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'left',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
   },
   statValue: {
     color: colors.ink,

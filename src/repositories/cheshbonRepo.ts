@@ -54,6 +54,7 @@ export type HomeSummary = {
     markedPractices: string[];
   };
   recentGratitude: Array<{ date: string; text: string }>;
+  thoughtJournal: Array<{ date: string; practiceName: string; text: string }>;
 };
 
 export async function getReminderPreferences(): Promise<ReminderPreferences> {
@@ -147,6 +148,30 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     sevenDaysAgo,
     reviewDate,
   );
+  const thoughtJournal = await db.getAllAsync<{ entry_date: string; practice_name: string; thought_text: string }>(
+    `SELECT de.entry_date,
+      p.name as practice_name,
+      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as thought_text
+     FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
+     LEFT JOIN metrics m ON m.practice_id = p.id
+      AND m.metric_type = 'text'
+      AND m.active = 1
+     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.metric_id = m.id
+     WHERE de.user_id = ?
+      AND de.entry_date < ?
+      AND (
+        p.id = 'practice_daily_thoughts'
+        OR LOWER(p.name) LIKE '%thought%'
+        OR LOWER(p.name) LIKE '%reflection%'
+      )
+      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+     ORDER BY de.entry_date DESC
+     LIMIT 30`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
 
   return {
     reviewStarted: Boolean(session),
@@ -156,6 +181,7 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     currentAvodah: await getCurrentAvodahSummary(db, reviewDate),
     morningReminder: await getMorningReminderSummary(db, reviewDate),
     recentGratitude: recentGratitude.map((row) => ({ date: row.entry_date, text: row.gratitude_text })),
+    thoughtJournal: thoughtJournal.map((row) => ({ date: row.entry_date, practiceName: row.practice_name, text: row.thought_text })),
   };
 }
 
