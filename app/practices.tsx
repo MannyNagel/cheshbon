@@ -8,7 +8,7 @@ import {
   createTask,
   getTaskFormOptions,
   getTasksForManagement,
-  moveTaskWithinSection,
+  moveTaskWithinReviewSection,
   removeTaskFromTodayForward,
   updateTask,
 } from '@/src/repositories/cheshbonRepo';
@@ -74,6 +74,7 @@ export default function PracticesScreen() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
   const handledAddParamRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -120,21 +121,13 @@ export default function PracticesScreen() {
     }
   }, [options, params.mode, params.routineId]);
 
-  const [sortBy, setSortBy] = useState<'routine' | 'domain' | 'section' | 'order' | 'name'>('routine');
+  const [sortBy, setSortBy] = useState<'routine' | 'domain' | 'section' | 'name'>('routine');
   const title = mode === 'add' ? 'Add Practice' : mode === 'edit' ? 'Edit Practice' : 'Practices';
   const sortedPractices = useMemo(() => {
     const copy = [...tasks];
     return copy.sort((a, b) => {
       if (sortBy === 'domain') return a.domainName.localeCompare(b.domainName) || a.name.localeCompare(b.name);
-      if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
-      if (sortBy === 'order') {
-        return (
-          a.routineName.localeCompare(b.routineName) ||
-          sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) ||
-          a.sortOrder - b.sortOrder ||
-          a.name.localeCompare(b.name)
-        );
-      }
+      if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.routineName.localeCompare(b.routineName) || a.name.localeCompare(b.name);
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       return a.routineName.localeCompare(b.routineName) || sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder;
     });
@@ -147,8 +140,6 @@ export default function PracticesScreen() {
           ? practice.domainName
           : sortBy === 'section'
             ? practice.reviewSectionName
-            : sortBy === 'order'
-              ? `${practice.routineName} · ${practice.reviewSectionName}`
             : sortBy === 'name'
               ? practice.name[0]?.toUpperCase() || '#'
               : practice.routineName;
@@ -247,7 +238,7 @@ export default function PracticesScreen() {
     setSaving(true);
     setMessage(null);
     try {
-      await moveTaskWithinSection(task.routinePracticeId, direction);
+      await moveTaskWithinReviewSection(task.routinePracticeId, direction);
       setMessage(await syncedMessage('Practice order updated.'));
       await load();
     } catch (error) {
@@ -276,10 +267,24 @@ export default function PracticesScreen() {
             </Text>
           </View>
           {mode === 'list' ? (
-            <Pressable accessibilityRole="button" onPress={startAdd} style={styles.iconAction}>
-              <CirclePlus color={colors.blue} size={18} />
-              <Text style={styles.iconActionText}>Add Practice</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  const next = !reorderMode;
+                  setReorderMode(next);
+                  if (next) setSortBy('section');
+                }}
+                style={[styles.iconAction, reorderMode && styles.iconActionActive]}
+              >
+                <ArrowUp color={reorderMode ? colors.blue : colors.ink} size={17} />
+                <Text style={[styles.iconActionText, reorderMode && styles.iconActionTextActive]}>{reorderMode ? 'Done' : 'Rearrange'}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={startAdd} style={styles.iconAction}>
+                <CirclePlus color={colors.blue} size={18} />
+                <Text style={styles.iconActionText}>Add Practice</Text>
+              </Pressable>
+            </View>
           ) : (
             <Pressable
               accessibilityRole="button"
@@ -305,11 +310,14 @@ export default function PracticesScreen() {
                 { id: 'routine', label: 'Routine' },
                 { id: 'domain', label: 'Domain' },
                 { id: 'section', label: 'Review Section' },
-                { id: 'order', label: 'Order' },
                 { id: 'name', label: 'Name' },
               ]}
               selectedId={sortBy}
-              onSelect={(id) => setSortBy(id as typeof sortBy)}
+              onSelect={(id) => {
+                const nextSort = id as typeof sortBy;
+                setSortBy(nextSort);
+                if (nextSort !== 'section') setReorderMode(false);
+              }}
             />
           </View>
           {groupedPractices.map((group) => (
@@ -326,7 +334,7 @@ export default function PracticesScreen() {
                       {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} | {task.enabled ? 'active' : 'hidden'}
                     </Text>
                   </View>
-                  {sortBy === 'order' ? (
+                  {reorderMode && sortBy === 'section' ? (
                     <View style={styles.orderButtons}>
                       <Pressable
                         accessibilityLabel={`Move ${task.name} up`}
@@ -562,6 +570,7 @@ const styles = StyleSheet.create({
   container: { backgroundColor: colors.paper, gap: spacing.lg, padding: spacing.lg, paddingBottom: 96 },
   header: { gap: spacing.sm },
   headerRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
+  headerActions: { alignItems: 'flex-end', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, justifyContent: 'flex-end' },
   headerText: { flex: 1, gap: spacing.sm },
   title: { color: colors.ink, fontSize: 32, fontWeight: '900' },
   subtitle: { color: colors.muted, fontSize: 16, lineHeight: 22 },
@@ -576,7 +585,9 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: spacing.md,
   },
+  iconActionActive: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
   iconActionText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  iconActionTextActive: { color: colors.blue },
   list: { gap: spacing.sm },
   sortBar: { backgroundColor: colors.surface, borderColor: colors.softLine, borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   group: { gap: spacing.sm },

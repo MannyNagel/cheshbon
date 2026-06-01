@@ -917,47 +917,41 @@ export async function removeTaskFromTodayForward(routinePracticeId: string, from
   });
 }
 
-export async function moveTaskWithinSection(routinePracticeId: string, direction: 'up' | 'down') {
+export async function moveTaskWithinReviewSection(routinePracticeId: string, direction: 'up' | 'down') {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<{
       id: string;
-      routine_template_id: string;
       review_section_id: string;
-      sort_order: number;
     }>(
-      'SELECT id, routine_template_id, review_section_id, sort_order FROM routine_practices WHERE id = ? AND archived_from IS NULL',
+      'SELECT id, review_section_id FROM routine_practices WHERE id = ? AND archived_from IS NULL',
       routinePracticeId,
     );
     if (!current) return;
 
-    const operator = direction === 'up' ? '<' : '>';
-    const order = direction === 'up' ? 'DESC' : 'ASC';
-    const neighbor = await db.getFirstAsync<{ id: string; sort_order: number }>(
-      `SELECT id, sort_order
-       FROM routine_practices
-       WHERE routine_template_id = ?
-        AND review_section_id = ?
-        AND archived_from IS NULL
-        AND sort_order ${operator} ?
-       ORDER BY sort_order ${order}
-       LIMIT 1`,
-      current.routine_template_id,
+    const rows = await db.getAllAsync<{ id: string }>(
+      `SELECT rp.id
+       FROM routine_practices rp
+       JOIN routine_templates rt ON rt.id = rp.routine_template_id
+       JOIN practices p ON p.id = rp.practice_id
+       WHERE rp.review_section_id = ?
+        AND rp.archived_from IS NULL
+       ORDER BY rp.sort_order, rt.priority, rt.name, p.name`,
       current.review_section_id,
-      current.sort_order,
     );
-    if (!neighbor) return;
+    const currentIndex = rows.findIndex((row) => row.id === current.id);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= rows.length) return;
 
-    await db.runAsync(
-      'UPDATE routine_practices SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      neighbor.sort_order,
-      current.id,
-    );
-    await db.runAsync(
-      'UPDATE routine_practices SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      current.sort_order,
-      neighbor.id,
-    );
+    const reordered = [...rows];
+    [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+    for (const [index, row] of reordered.entries()) {
+      await db.runAsync(
+        'UPDATE routine_practices SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        (index + 1) * 10,
+        row.id,
+      );
+    }
   });
 }
 
@@ -1102,7 +1096,7 @@ export async function createBlocker(input: { name: string; description?: string 
 
 async function getNextTaskSortOrder(
   db: Awaited<ReturnType<typeof getDb>>,
-  routineId: string,
+  _routineId: string,
   reviewSectionId: string,
   domainId: string,
   taskName: string,
@@ -1114,11 +1108,9 @@ async function getNextTaskSortOrder(
   const row = await db.getFirstAsync<{ max_sort: number | null }>(
     `SELECT MAX(sort_order) as max_sort
      FROM routine_practices
-     WHERE routine_template_id = ?
-      AND review_section_id = ?
+     WHERE review_section_id = ?
       AND sort_order >= ?
       AND sort_order <= ?`,
-    routineId,
     reviewSectionId,
     min,
     max,
