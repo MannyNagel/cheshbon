@@ -1,7 +1,7 @@
 import { getDb } from '@/src/db/client';
 import type { NightlyReviewItem, NightlyReviewSection, RoutineTemplate } from '@/src/models/types';
 import { getMetricsForPracticeIds, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
-import { dayOfWeek } from '@/src/utils/dates';
+import { addDaysIso, dayOfWeek } from '@/src/utils/dates';
 
 type RoutineRow = {
   id: string;
@@ -62,6 +62,7 @@ export async function getActiveRoutinesForDate(reviewDate: string): Promise<Rout
     const exception = exceptionsByRoutine.get(routine.id);
     if (exception === 'enable') return true;
     if (exception === 'disable') return false;
+    if (routine.id === 'routine_rosh_chodesh' && isFirstRoshChodeshDate(reviewDate)) return true;
     return scheduleRows
       .filter((schedule) => schedule.routine_template_id === routine.id)
       .some((schedule) => {
@@ -190,4 +191,34 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
   }
 
   return [...sectionMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function isFirstRoshChodeshDate(isoDate: string) {
+  const today = getHebrewDateParts(isoDate);
+  if (!today || isTishrei(today.month)) return false;
+
+  const next = getHebrewDateParts(addDaysIso(isoDate, 1));
+  if (today.day === 30 && next?.day === 1 && !isTishrei(next.month)) return true;
+
+  const previous = getHebrewDateParts(addDaysIso(isoDate, -1));
+  return today.day === 1 && previous?.day !== 30;
+}
+
+function getHebrewDateParts(isoDate: string) {
+  try {
+    const date = new Date(`${isoDate}T12:00:00`);
+    const parts = new Intl.DateTimeFormat('en-u-ca-hebrew', {
+      day: 'numeric',
+      month: 'long',
+    }).formatToParts(date);
+    const day = Number(parts.find((part) => part.type === 'day')?.value);
+    const month = parts.find((part) => part.type === 'month')?.value ?? '';
+    return Number.isFinite(day) ? { day, month } : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTishrei(month: string) {
+  return month.toLowerCase().startsWith('tish');
 }
