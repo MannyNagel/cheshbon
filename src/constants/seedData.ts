@@ -20,19 +20,17 @@ export const reviewSections = [
   ['section_overall', 'Overview', 'All-day practices'],
 ] as const;
 export const routines = [
-  ['routine_core', 'Weekly Core', 'The stable core for regular review days', 'core', 0],
-  ['routine_yeshiva_zman', 'Yeshiva Zman', 'Sunday through Thursday seder structure', 'zman', 10],
-  ['routine_summer', 'Summer', 'Summer rhythm and open-time structure', 'seasonal', 10],
-  ['routine_shabbos', 'Shabbos', 'Shabbos review overlay', 'shabbos', 20],
-  ['routine_yom_tov', 'Yom Tov', 'Generic Yom Tov review overlay', 'holiday', 20],
-  ['routine_travel', 'Travel / Disrupted Schedule', 'Disruption without losing the center', 'travel', 40],
-  ['routine_sick', 'Sick Day / Low Capacity', 'Realistic avodah without unnecessary guilt', 'custom', 50],
+  ['routine_core', 'Weekly Core', 'The stable core for regular review days', 'core', 0, true],
+  ['routine_shabbos', 'Shabbos', 'Shabbos review overlay', 'shabbos', 20, true],
+  ['routine_vacation', 'Vacation', 'A lighter structure for vacation or travel periods', 'travel', 30, false],
+  ['routine_work', 'Work', 'Regular weekday work structure', 'custom', 40, true],
 ] as const;
 
 export const schedules = [
-  ['schedule_core_all', 'routine_core', null, null, [0, 1, 2, 3, 4, 5, 6]],
-  ['schedule_yeshiva_zman', 'routine_yeshiva_zman', null, null, [0, 1, 2, 3, 4]],
+  ['schedule_core_week', 'routine_core', null, null, [0, 1, 2, 3, 4, 5]],
   ['schedule_shabbos', 'routine_shabbos', null, null, [6]],
+  ['schedule_vacation_all', 'routine_vacation', null, null, [0, 1, 2, 3, 4, 5, 6]],
+  ['schedule_work_weekdays', 'routine_work', null, null, [1, 2, 3, 4, 5]],
 ] as const;
 
 export type PracticeSeed = {

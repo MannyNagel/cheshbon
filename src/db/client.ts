@@ -76,15 +76,16 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
       );
     }
 
-    for (const [id, name, description, routineType, priority] of routines) {
+    for (const [id, name, description, routineType, priority, active] of routines) {
       await db.runAsync(
-        'INSERT OR IGNORE INTO routine_templates (id, user_id, name, description, routine_type, priority) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO routine_templates (id, user_id, name, description, routine_type, priority, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
         id,
         LOCAL_USER_ID,
         name,
         description,
         routineType,
         priority,
+        active ? 1 : 0,
       );
     }
 
@@ -165,6 +166,24 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
       await db.runAsync('UPDATE blockers SET description = ? WHERE id = ?', `Common blocker #${index + 1}`, id);
     }
   });
+}
+
+export async function resetDatabaseToSeedDefaults() {
+  const db = await getDb();
+  await db.execAsync(schemaSql);
+  await db.execAsync('PRAGMA foreign_keys = OFF;');
+  try {
+    await db.withTransactionAsync(async () => {
+      for (const tableName of [...resetTableNames].reverse()) {
+        await db.runAsync(`DELETE FROM ${tableName}`);
+      }
+    });
+  } finally {
+    await db.execAsync('PRAGMA foreign_keys = ON;');
+  }
+  await seedDatabase(db);
+  await normalizeQualityScale(db);
+  await normalizeReviewCompletionState(db);
 }
 
 export async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
@@ -425,3 +444,23 @@ export async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
     );
   });
 }
+
+const resetTableNames = [
+  'domains',
+  'review_sections',
+  'practices',
+  'metrics',
+  'metric_options',
+  'routine_templates',
+  'routine_schedules',
+  'routine_exceptions',
+  'blockers',
+  'routine_practices',
+  'daily_review_sessions',
+  'daily_entries',
+  'entry_metric_values',
+  'practice_blockers',
+  'entry_blockers',
+  'weekly_reviews',
+  'app_preferences',
+] as const;

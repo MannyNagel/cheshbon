@@ -1,3 +1,4 @@
+import { resetDatabaseToSeedDefaults } from '@/src/db/client';
 import { exportAllData, importAllData } from '@/src/repositories/cheshbonRepo';
 import { isSupabaseConfigured, supabase } from '@/src/services/supabaseClient';
 
@@ -144,6 +145,10 @@ export async function signOutOfCloud() {
   const client = requireSupabase();
   const { error } = await client.auth.signOut();
   if (error) throw error;
+  await resetDatabaseToSeedDefaults();
+  if (typeof window !== 'undefined') {
+    window.location.assign('/');
+  }
 }
 
 export async function pushLocalDataToCloud() {
