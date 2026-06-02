@@ -41,6 +41,7 @@ export async function initializeDatabase() {
   if (!existing?.count) {
     await seedDatabase(db);
   }
+  await ensureRoshChodeshRoutine(db);
   await normalizeQualityScale(db);
   await normalizeReviewCompletionState(db);
 }
@@ -164,6 +165,127 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
         name,
       );
       await db.runAsync('UPDATE blockers SET description = ? WHERE id = ?', `Common blocker #${index + 1}`, id);
+    }
+  });
+}
+
+export async function ensureRoshChodeshRoutine(db?: SQLite.SQLiteDatabase) {
+  const targetDb = db ?? (await getDb());
+  const currentAvodahDomain = domains.find(([id]) => id === 'domain_current_avodah');
+  const overviewSection = reviewSections.find(([id]) => id === 'section_overall');
+  const roshChodeshRoutine = routines.find(([id]) => id === 'routine_rosh_chodesh');
+  const roshChodeshPracticeIds = new Set(['practice_rosh_chodesh_past_month', 'practice_rosh_chodesh_improvement']);
+  const roshChodeshPractices = practices.filter((practice) => roshChodeshPracticeIds.has(practice.id));
+  const roshChodeshRoutinePractices = routinePractices.filter(([, routineId]) => routineId === 'routine_rosh_chodesh');
+  const roshChodeshSchedules = schedules.filter(([, routineId]) => routineId === 'routine_rosh_chodesh');
+
+  await targetDb.withTransactionAsync(async () => {
+    if (currentAvodahDomain) {
+      const [id, name, description] = currentAvodahDomain;
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO domains (id, user_id, name, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+        id,
+        LOCAL_USER_ID,
+        name,
+        description,
+        domains.findIndex(([domainId]) => domainId === id) + 1,
+      );
+    }
+
+    if (overviewSection) {
+      const [id, name, description] = overviewSection;
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO review_sections (id, user_id, name, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+        id,
+        LOCAL_USER_ID,
+        name,
+        description,
+        (reviewSections.findIndex(([sectionId]) => sectionId === id) + 1) * 10,
+      );
+    }
+
+    if (roshChodeshRoutine) {
+      const [id, name, description, routineType, priority, active] = roshChodeshRoutine;
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO routine_templates (id, user_id, name, description, routine_type, priority, active) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        id,
+        LOCAL_USER_ID,
+        name,
+        description,
+        routineType,
+        priority,
+        active ? 1 : 0,
+      );
+    }
+
+    for (const [id, routineId, startDate, endDate, daysOfWeek] of roshChodeshSchedules) {
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO routine_schedules (id, routine_template_id, start_date, end_date, days_of_week) VALUES (?, ?, ?, ?, ?)',
+        id,
+        routineId,
+        startDate,
+        endDate,
+        JSON.stringify(daysOfWeek),
+      );
+    }
+
+    for (const practice of roshChodeshPractices) {
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, 0)',
+        practice.id,
+        LOCAL_USER_ID,
+        practice.domainId,
+        practice.name,
+        practice.description ?? null,
+      );
+
+      for (const [index, metric] of practice.metrics.entries()) {
+        await targetDb.runAsync(
+          `INSERT OR IGNORE INTO metrics
+            (id, practice_id, name, metric_type, scale_min, scale_max, required, help_text, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          metric.id,
+          practice.id,
+          metric.name,
+          metric.metricType,
+          metric.scaleMin ?? null,
+          metric.scaleMax ?? null,
+          metric.required ? 1 : 0,
+          metric.helpText ?? null,
+          index + 1,
+        );
+      }
+
+      await targetDb.runAsync(
+        `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+         SELECT ?, id, 0
+         FROM blockers
+         WHERE active = 1`,
+        practice.id,
+      );
+      await targetDb.runAsync(
+        `UPDATE practice_blockers
+         SET enabled = 0,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE practice_id = ?`,
+        practice.id,
+      );
+    }
+
+    for (const [id, routineId, practiceId, sectionId, sortOrder, required, displayName, helpText] of roshChodeshRoutinePractices) {
+      await targetDb.runAsync(
+        `INSERT OR IGNORE INTO routine_practices
+          (id, routine_template_id, practice_id, review_section_id, sort_order, required, display_name_override, help_text_override)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        routineId,
+        practiceId,
+        sectionId,
+        sortOrder,
+        required,
+        displayName,
+        helpText,
+      );
     }
   });
 }

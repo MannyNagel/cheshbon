@@ -29,6 +29,7 @@ import {
   signUpForCloud,
   type CloudStatus,
 } from '@/src/services/cloudSyncService';
+import { clearAccessHandleBusyRecovery, scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 type DomainRow = { id: string; name: string; description: string | null; active: number; inUse: number };
 type BlockerRow = { id: string; name: string; description: string | null; active: number };
@@ -47,6 +48,12 @@ export default function SettingsScreen() {
   const autoPulledAccountRef = useRef<string | null>(null);
   const authRedirectHandledRef = useRef(false);
 
+  const recoverFromAccessHandleError = useCallback((error: unknown) => {
+    if (!scheduleAccessHandleBusyReload(error)) return false;
+    setMessage('Finishing sign-in. Refreshing once...');
+    return true;
+  }, []);
+
   const load = useCallback(async () => {
     let cloudStatusMessage: string | null = null;
     let oauthCompleted = false;
@@ -59,34 +66,46 @@ export default function SettingsScreen() {
           setMessage(authMessage);
         }
       } catch (error) {
+        if (recoverFromAccessHandleError(error)) return;
         setMessage(error instanceof Error ? error.message : 'Google sign-in could not be completed.');
       }
     }
-    const [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
-      getCloudStatus().catch((error) => {
-        cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
-        return { configured: true, signedIn: oauthCompleted, email: null, name: null, lastSyncedAt: null };
-      }),
-      getReminderPreferences(),
-      getDomainEditorRows(),
-      getBlockerEditorRows(),
-    ]);
+    let nextCloudStatus: CloudStatus;
+    let nextReminderPreferences: ReminderPreferences;
+    let nextDomainRows: DomainRow[];
+    let nextBlockerRows: BlockerRow[];
+    try {
+      [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
+        getCloudStatus().catch((error) => {
+          cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
+          return { configured: true, signedIn: oauthCompleted, email: null, name: null, lastSyncedAt: null };
+        }),
+        getReminderPreferences(),
+        getDomainEditorRows(),
+        getBlockerEditorRows(),
+      ]);
+    } catch (error) {
+      if (recoverFromAccessHandleError(error)) return;
+      throw error;
+    }
     setCloudStatus(nextCloudStatus);
     setReminderPreferences(nextReminderPreferences);
     setDomainRows(nextDomainRows);
     setBlockerRows(nextBlockerRows);
+    clearAccessHandleBusyRecovery();
     if (cloudStatusMessage) setMessage(cloudStatusMessage);
-  }, []);
+  }, [recoverFromAccessHandleError]);
 
   useEffect(() => {
     load().catch((error) => {
+      if (recoverFromAccessHandleError(error)) return;
       setMessage(error instanceof Error ? error.message : 'Settings could not load.');
       setCloudStatus({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null });
       setReminderPreferences({ taskRemindersEnabled: false, morningReminderEnabled: true, morningReminderTime: '05:30' });
       setDomainRows([]);
       setBlockerRows([]);
     });
-  }, [load]);
+  }, [load, recoverFromAccessHandleError]);
 
   useEffect(() => {
     if (!cloudStatus?.signedIn) {
@@ -102,9 +121,10 @@ export default function SettingsScreen() {
         await load();
       })
       .catch((error) => {
+        if (recoverFromAccessHandleError(error)) return;
         setMessage(error instanceof Error ? error.message : 'Cloud restore failed.');
       });
-  }, [cloudStatus, load]);
+  }, [cloudStatus, load, recoverFromAccessHandleError]);
 
   async function runCloudAction(action: () => Promise<string | null | void>, successMessage: string) {
     setBusy(true);

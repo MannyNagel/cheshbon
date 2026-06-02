@@ -6,12 +6,24 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { colors } from '@/src/components/ui';
 import { initializeDatabase } from '@/src/db/client';
+import { scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    initializeDatabase().finally(() => setReady(true));
+    let mounted = true;
+    initializeDatabase()
+      .catch((error) => {
+        if (scheduleAccessHandleBusyReload(error)) return;
+        console.error(error);
+      })
+      .finally(() => {
+        if (mounted) setReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (!ready) {
