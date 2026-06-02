@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CirclePlus, Pencil, Save, Trash2, X } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, CirclePlus, Pencil, Save, Search, Trash2, X } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -79,6 +79,8 @@ export default function PracticesScreen() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'inactive'>('active');
   const handledAddParamRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -132,15 +134,28 @@ export default function PracticesScreen() {
 
   const [sortBy, setSortBy] = useState<'routine' | 'domain' | 'section' | 'name'>('routine');
   const title = mode === 'add' ? 'Add Practice' : mode === 'edit' ? 'Edit Practice' : 'Practices';
+  const filteredPractices = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return tasks
+      .filter((task) => {
+        if (statusFilter === 'active') return task.enabled === 1;
+        if (statusFilter === 'inactive') return task.enabled !== 1;
+        return true;
+      })
+      .filter((task) => {
+        if (!normalizedQuery) return true;
+        return `${task.name} ${task.domainName} ${task.routineName} ${task.reviewSectionName} ${task.metricName ?? ''}`.toLowerCase().includes(normalizedQuery);
+      });
+  }, [query, statusFilter, tasks]);
   const sortedPractices = useMemo(() => {
-    const copy = [...tasks];
+    const copy = [...filteredPractices];
     return copy.sort((a, b) => {
       if (sortBy === 'domain') return a.domainName.localeCompare(b.domainName) || a.name.localeCompare(b.name);
       if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.routineName.localeCompare(b.routineName) || a.name.localeCompare(b.name);
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       return a.routineName.localeCompare(b.routineName) || sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder;
     });
-  }, [sortBy, tasks]);
+  }, [filteredPractices, sortBy]);
   const groupedPractices = useMemo(() => {
     const groups: Array<{ title: string; practices: TaskRow[] }> = [];
     for (const practice of sortedPractices) {
@@ -312,7 +327,22 @@ export default function PracticesScreen() {
 
       {mode === 'list' ? (
         <View style={styles.list}>
-          <View style={styles.sortBar}>
+          <View style={styles.filterPanel}>
+            <View style={styles.searchRow}>
+              <Search color={colors.muted} size={18} />
+              <TextInput
+                onChangeText={setQuery}
+                placeholder="Search practices"
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                value={query}
+              />
+              {query ? (
+                <Pressable accessibilityRole="button" onPress={() => setQuery('')} style={styles.clearButton}>
+                  <X color={colors.ink} size={16} />
+                </Pressable>
+              ) : null}
+            </View>
             <Text style={styles.label}>Sort by</Text>
             <ChoiceGrid
               choices={[
@@ -328,8 +358,18 @@ export default function PracticesScreen() {
                 if (nextSort !== 'section') setReorderMode(false);
               }}
             />
+            <Text style={styles.label}>Show</Text>
+            <ChoiceGrid
+              choices={[
+                { id: 'active', label: 'Active' },
+                { id: 'all', label: 'All' },
+                { id: 'inactive', label: 'Inactive' },
+              ]}
+              selectedId={statusFilter}
+              onSelect={(id) => setStatusFilter(id as typeof statusFilter)}
+            />
           </View>
-          {groupedPractices.map((group) => (
+          {groupedPractices.length ? groupedPractices.map((group) => (
             <View key={group.title} style={styles.group}>
               <Text style={styles.groupTitle}>{group.title}</Text>
               {group.practices.map((task) => (
@@ -372,7 +412,7 @@ export default function PracticesScreen() {
                 </View>
               ))}
             </View>
-          ))}
+          )) : <Text style={styles.emptyText}>No practices match that search.</Text>}
         </View>
       ) : (
         <TaskForm form={form} options={options} reminderPreferences={reminderPreferences} setForm={setForm} />
@@ -605,7 +645,14 @@ const styles = StyleSheet.create({
   iconActionText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
   iconActionTextActive: { color: colors.blue },
   list: { gap: spacing.sm },
-  sortBar: { backgroundColor: colors.surface, borderColor: colors.softLine, borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  clearButton: {
+    alignItems: 'center',
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  emptyText: { color: colors.muted, fontSize: 15, lineHeight: 21, textAlign: 'left' },
+  filterPanel: { backgroundColor: colors.surface, borderColor: colors.softLine, borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
   group: { gap: spacing.sm },
   groupTitle: { color: colors.green, fontSize: 15, fontWeight: '900', textTransform: 'uppercase' },
   taskCard: {
@@ -649,6 +696,17 @@ const styles = StyleSheet.create({
   fieldStack: { alignItems: 'flex-start', gap: spacing.sm },
   label: { color: colors.ink, fontSize: 14, fontWeight: '900' },
   input: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 15, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'left', writingDirection: 'ltr' },
+  searchInput: { color: colors.ink, flex: 1, fontSize: 15, minHeight: 42, textAlign: 'left', writingDirection: 'ltr' },
+  searchRow: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
   choiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceSelected: { backgroundColor: colors.blueSoft, borderColor: colors.blue },

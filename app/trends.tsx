@@ -80,34 +80,30 @@ export default function TrendsScreen() {
       </View>
 
       <Section title="Domains">
-        {domainChoices.length ? (
+        {summary.domainInsights.length ? (
           <View style={styles.domainGrid}>
-            {domainChoices.map((domain) => {
-              const insight = summary.domainInsights.find((item) => item.domainId === domain.domainId);
-              const trackedPractices = insight?.trackedPractices ?? summary.practiceTrends.filter((practice) => practice.domainId === domain.domainId).length;
-              return (
-                <Pressable
-                  accessibilityRole="button"
-                  key={domain.domainId}
-                  onPress={() => router.push({ pathname: '/domain-trends/[domainId]', params: { domainId: domain.domainId } })}
-                  style={styles.domainCard}
-                >
-                  <View style={styles.rowHeader}>
-                    <Text style={styles.rowTitle}>{domain.domainName}</Text>
-                    <DirectionIcon direction={insight?.direction ?? 'insufficient'} />
-                  </View>
-                  <Text style={styles.scoreText}>{formatScore(insight?.score7 ?? null)}</Text>
-                  <Text style={styles.rowMeta}>
-                    Week blend | Month {formatScore(insight?.score30 ?? null)} | {trackedPractices} practices
-                  </Text>
-                  <Meter value={insight?.score7 ?? null} max={5} />
-                  <Text style={styles.domainLink}>Open domain</Text>
-                </Pressable>
-              );
-            })}
+            {summary.domainInsights.map((domain) => (
+              <Pressable
+                accessibilityRole="button"
+                key={domain.domainId}
+                onPress={() => router.push({ pathname: '/domain-trends/[domainId]', params: { domainId: domain.domainId } })}
+                style={styles.domainCard}
+              >
+                <View style={styles.rowHeader}>
+                  <Text style={styles.rowTitle}>{domain.domainName}</Text>
+                  <DirectionIcon direction={domain.direction} />
+                </View>
+                <Text style={styles.scoreText}>{formatScore(domain.score7)}</Text>
+                <Text style={styles.rowMeta}>
+                  Week blend | Month {formatScore(domain.score30)} | {domain.trackedPractices} practices
+                </Text>
+                <Meter value={domain.score7} max={5} />
+                <Text style={styles.domainLink}>Open domain</Text>
+              </Pressable>
+            ))}
           </View>
         ) : (
-          <Empty text="Complete a few reviews and domain patterns will start to appear." />
+          <Empty text="Complete a few non-text reviews and domain patterns will start to appear." />
         )}
       </Section>
 

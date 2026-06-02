@@ -44,6 +44,12 @@ export async function getTrendSummary(): Promise<TrendSummary> {
      LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
      WHERE p.active = 1
       AND d.active = 1
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )
      ORDER BY d.sort_order, p.name, m.sort_order`,
   );
 
@@ -60,7 +66,14 @@ export async function getTrendSummary(): Promise<TrendSummary> {
        FROM entry_blockers eb
        JOIN blockers b ON b.id = eb.blocker_id
        JOIN daily_entries de ON de.id = eb.entry_id
+       JOIN practices p ON p.id = de.practice_id
        WHERE de.entry_date >= ?
+        AND EXISTS (
+          SELECT 1
+          FROM routine_practices rp
+          WHERE rp.practice_id = p.id
+           AND rp.archived_from IS NULL
+        )
        GROUP BY b.id, b.name
        ORDER BY count DESC, b.name
        LIMIT 8`,
@@ -143,7 +156,13 @@ async function getPracticeScores(startDate: string): Promise<ScoreValue[]> {
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
      WHERE de.entry_date >= ?
       AND p.active = 1
-      AND d.active = 1`,
+      AND d.active = 1
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )`,
     startDate,
   );
 
@@ -279,8 +298,15 @@ async function getNumericValues(metricId: string): Promise<NumericValue[]> {
     `SELECT de.entry_date as date, emv.value_number as value
      FROM entry_metric_values emv
      JOIN daily_entries de ON de.id = emv.entry_id
+     JOIN practices p ON p.id = de.practice_id
      WHERE emv.metric_id = ?
       AND emv.value_number IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )
      ORDER BY de.entry_date`,
     metricId,
   );
@@ -291,8 +317,15 @@ async function getBooleanValues(practiceId: string, metricId: string): Promise<N
   const rows = await db.getAllAsync<{ date: string; value_boolean: number | null; status: string | null }>(
     `SELECT de.entry_date as date, emv.value_boolean, de.status
      FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = ?
      WHERE de.practice_id = ?
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )
      ORDER BY de.entry_date`,
     metricId,
     practiceId,
@@ -314,9 +347,16 @@ async function getTextValues(practiceId: string, metricId: string): Promise<Text
     `SELECT de.entry_date as date,
       COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as text
      FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = ?
      WHERE de.practice_id = ?
       AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )
      ORDER BY de.entry_date DESC
      LIMIT 8`,
     metricId,
