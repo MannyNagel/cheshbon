@@ -60,6 +60,25 @@ export type HomeSummary = {
 export type JournalKind = 'gratitude' | 'thoughts';
 export type JournalEntry = { date: string; practiceName: string; text: string };
 
+const homeFunctionPracticeIds = new Set([
+  'practice_gratitude',
+  'practice_daily_thoughts',
+  'practice_daily_avodah',
+  'practice_weekly_avodah',
+]);
+
+function isHomeFunctionPractice(practice: { id?: string | null; name?: string | null; domainId?: string | null; domain_id?: string | null }) {
+  const name = practice.name?.toLowerCase() ?? '';
+  const domainId = practice.domainId ?? practice.domain_id;
+  return (
+    homeFunctionPracticeIds.has(practice.id ?? '') ||
+    domainId === 'domain_current_avodah' ||
+    name === 'gratitude' ||
+    name.includes('thought') ||
+    name.includes('reflection')
+  );
+}
+
 export async function getReminderPreferences(): Promise<ReminderPreferences> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ key: string; value: string }>(
@@ -805,6 +824,7 @@ export async function getTasksForManagement() {
     metricType: firstMetricByPractice.get(row.practiceId)?.metric_type ?? null,
     blockerIds: blockersByPractice.get(row.practiceId) ?? [],
     blockersConfigured: customizedBlockerPractices.has(row.practiceId) ? 1 : 0,
+    protectedFromRemoval: isHomeFunctionPractice({ id: row.practiceId, name: row.name, domainId: row.domainId }) ? 1 : 0,
   }));
 }
 
@@ -999,6 +1019,16 @@ export async function createTask(input: {
 
 export async function removeTaskFromTodayForward(routinePracticeId: string, fromDate = todayIsoDate()) {
   const db = await getDb();
+  const practice = await db.getFirstAsync<{ id: string; name: string; domain_id: string }>(
+    `SELECT p.id, p.name, p.domain_id
+     FROM routine_practices rp
+     JOIN practices p ON p.id = rp.practice_id
+     WHERE rp.id = ?`,
+    routinePracticeId,
+  );
+  if (practice && isHomeFunctionPractice(practice)) {
+    throw new Error('This practice supports the Home page. Mark it inactive instead of removing it.');
+  }
   await db.runAsync(
     'UPDATE routine_practices SET archived_from = ?, enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     fromDate,

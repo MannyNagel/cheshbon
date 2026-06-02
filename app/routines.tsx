@@ -43,6 +43,9 @@ export default function RoutinesScreen() {
   const [form, setForm] = useState(emptyRoutineForm);
   const [newSchedule, setNewSchedule] = useState(emptySchedule);
   const [createdRoutineId, setCreatedRoutineId] = useState<string | null>(null);
+  const [showInitialDateRange, setShowInitialDateRange] = useState(false);
+  const [showNewDateRange, setShowNewDateRange] = useState(false);
+  const [editingScheduleDates, setEditingScheduleDates] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -71,6 +74,9 @@ export default function RoutinesScreen() {
     setForm(emptyRoutineForm);
     setNewSchedule(emptySchedule);
     setCreatedRoutineId(null);
+    setShowInitialDateRange(false);
+    setShowNewDateRange(false);
+    setEditingScheduleDates({});
     setMessage(null);
   }
 
@@ -79,6 +85,9 @@ export default function RoutinesScreen() {
     setEditingRoutine(routine);
     setForm({ name: routine.name, description: routine.description ?? '', active: routine.active });
     setNewSchedule(emptySchedule);
+    setShowInitialDateRange(false);
+    setShowNewDateRange(false);
+    setEditingScheduleDates({});
     setMessage(null);
   }
 
@@ -117,6 +126,7 @@ export default function RoutinesScreen() {
     if (!routineId) return;
     await addRoutineSchedule({ routineId, ...newSchedule });
     setNewSchedule(emptySchedule);
+    setShowNewDateRange(false);
     setMessage(await syncedMessage('Date range added.'));
     await load();
     const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
@@ -266,36 +276,45 @@ export default function RoutinesScreen() {
           {mode === 'edit' && editRoutine ? (
             <>
               <View style={styles.sectionBlock}>
-                <Text style={styles.panelTitle}>Date ranges</Text>
+                <Text style={styles.panelTitle}>When this routine applies</Text>
+                <Text style={styles.helperText}>Choose the days of the week first. Add a specific date range only when this routine applies during a limited stretch of time.</Text>
                 {editRoutine.schedules.map((schedule) => (
                   <View key={schedule.id} style={styles.scheduleEditor}>
-                    <View style={styles.datePair}>
-                      <TextInput
-                        defaultValue={schedule.startDate ?? ''}
-                        onEndEditing={async (event) => {
-                          await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
-                          setMessage(await syncedMessage('Date range updated.'));
-                          await load();
-                          setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                        }}
-                        placeholder="Start date"
-                        placeholderTextColor={colors.muted}
-                        style={styles.scheduleInput}
-                      />
-                      <TextInput
-                        defaultValue={schedule.endDate ?? ''}
-                        onEndEditing={async (event) => {
-                          await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
-                          setMessage(await syncedMessage('Date range updated.'));
-                          await load();
-                          setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                        }}
-                        placeholder="End date"
-                        placeholderTextColor={colors.muted}
-                        style={styles.scheduleInput}
-                      />
-                    </View>
+                    <Text style={styles.scheduleHint}>{formatRange(schedule.startDate, schedule.endDate)}</Text>
                     <DayChips days={schedule.daysOfWeek} onToggle={(day) => toggleDay(schedule.id, schedule.daysOfWeek, day)} />
+                    {editingScheduleDates[schedule.id] ? (
+                      <View style={styles.datePair}>
+                        <TextInput
+                          defaultValue={schedule.startDate ?? ''}
+                          onEndEditing={async (event) => {
+                            await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
+                            setMessage(await syncedMessage('Date range updated.'));
+                            await load();
+                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                          }}
+                          placeholder="Start date YYYY-MM-DD"
+                          placeholderTextColor={colors.muted}
+                          style={styles.scheduleInput}
+                        />
+                        <TextInput
+                          defaultValue={schedule.endDate ?? ''}
+                          onEndEditing={async (event) => {
+                            await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
+                            setMessage(await syncedMessage('Date range updated.'));
+                            await load();
+                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                          }}
+                          placeholder="End date YYYY-MM-DD"
+                          placeholderTextColor={colors.muted}
+                          style={styles.scheduleInput}
+                        />
+                      </View>
+                    ) : null}
+                    <ActionButton
+                      icon={editingScheduleDates[schedule.id] ? <X color={colors.ink} size={16} /> : <CirclePlus color={colors.blue} size={16} />}
+                      label={editingScheduleDates[schedule.id] ? 'Done with dates' : schedule.startDate || schedule.endDate ? 'Edit specific range' : 'Choose specific range'}
+                      onPress={() => setEditingScheduleDates((current) => ({ ...current, [schedule.id]: !current[schedule.id] }))}
+                    />
                     <ActionButton
                       icon={<Trash2 color={colors.rose} size={16} />}
                       label="Remove range"
@@ -308,9 +327,19 @@ export default function RoutinesScreen() {
                     />
                   </View>
                 ))}
-                <Text style={styles.panelTitle}>Add date range</Text>
-                <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} />
-                <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add range" onPress={addScheduleRange} />
+                {showNewDateRange ? (
+                  <View style={styles.scheduleEditor}>
+                    <Text style={styles.panelTitle}>New specific date range</Text>
+                    <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} showDateFields />
+                    <View style={styles.actions}>
+                      <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add range" onPress={addScheduleRange} />
+                      <ActionButton icon={<X color={colors.ink} size={16} />} label="Cancel" onPress={() => setShowNewDateRange(false)} />
+                    </View>
+                  </View>
+                ) : (
+                  <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add specific date range" onPress={() => setShowNewDateRange(true)} />
+                )}
+                <Text style={styles.helperText}>If a routine stops applying for a while, you can always mark the routine inactive and turn it back on later.</Text>
               </View>
               <View style={styles.sectionBlock}>
                 <Text style={styles.panelTitle}>Practices</Text>
@@ -324,8 +353,20 @@ export default function RoutinesScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.panelTitle}>Initial date range</Text>
-              <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} />
+              <View style={styles.sectionBlock}>
+                <Text style={styles.panelTitle}>When this routine applies</Text>
+                <Text style={styles.helperText}>Select the days of the week this routine applies. A start and end date are optional.</Text>
+                <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} showDateFields={showInitialDateRange} />
+                {!showInitialDateRange ? (
+                  <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Choose a specific date range" onPress={() => setShowInitialDateRange(true)} />
+                ) : (
+                  <ActionButton icon={<X color={colors.ink} size={16} />} label="Use days only" onPress={() => {
+                    setShowInitialDateRange(false);
+                    setNewSchedule((current) => ({ ...current, startDate: '', endDate: '' }));
+                  }} />
+                )}
+                <Text style={styles.helperText}>If a routine stops applying for a while, you can always mark the routine inactive and turn it back on later.</Text>
+              </View>
             </>
           )}
         </View>
@@ -398,30 +439,34 @@ function ScheduleForm({
   schedule,
   setSchedule,
   onToggleDay,
+  showDateFields = false,
 }: {
   schedule: typeof emptySchedule;
   setSchedule: React.Dispatch<React.SetStateAction<typeof emptySchedule>>;
   onToggleDay: (day: number) => void;
+  showDateFields?: boolean;
 }) {
   return (
     <>
-      <View style={styles.datePair}>
-        <TextInput
-          onChangeText={(startDate) => setSchedule((current) => ({ ...current, startDate }))}
-          placeholder="Start date YYYY-MM-DD"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={schedule.startDate}
-        />
-        <TextInput
-          onChangeText={(endDate) => setSchedule((current) => ({ ...current, endDate }))}
-          placeholder="End date YYYY-MM-DD"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={schedule.endDate}
-        />
-      </View>
       <DayChips days={schedule.daysOfWeek} onToggle={onToggleDay} />
+      {showDateFields ? (
+        <View style={styles.datePair}>
+          <TextInput
+            onChangeText={(startDate) => setSchedule((current) => ({ ...current, startDate }))}
+            placeholder="Start date YYYY-MM-DD"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={schedule.startDate}
+          />
+          <TextInput
+            onChangeText={(endDate) => setSchedule((current) => ({ ...current, endDate }))}
+            placeholder="End date YYYY-MM-DD"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={schedule.endDate}
+          />
+        </View>
+      ) : null}
     </>
   );
 }
@@ -598,6 +643,7 @@ const styles = StyleSheet.create({
   practiceBadge: { color: colors.green, fontSize: 12, fontWeight: '900' },
   practiceBadgeMuted: { color: colors.muted },
   emptyText: { color: colors.muted, fontSize: 13 },
+  helperText: { color: colors.muted, fontSize: 14, lineHeight: 20 },
   sectionBlock: { borderTopColor: colors.softLine, borderTopWidth: 1, gap: spacing.sm, paddingTop: spacing.md },
   scheduleEditor: {
     borderColor: colors.softLine,
@@ -633,6 +679,7 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     writingDirection: 'ltr',
   },
+  scheduleHint: { color: colors.green, fontSize: 13, fontWeight: '900' },
   days: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   dayChip: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm },
   dayChipSelected: { backgroundColor: colors.blueSoft, borderColor: colors.blue },

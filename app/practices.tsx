@@ -44,6 +44,7 @@ type TaskRow = {
   archivedFrom: string | null;
   blockerIds: string[];
   blockersConfigured: number;
+  protectedFromRemoval: number;
 };
 
 const metricOptions: Array<{ id: MetricKind; label: string }> = [
@@ -383,11 +384,14 @@ export default function PracticesScreen() {
             <Save color="#FFFFFF" size={18} />
             <Text style={styles.saveText}>{saving ? 'Saving...' : mode === 'edit' ? 'Save practice' : 'Add practice'}</Text>
           </Pressable>
-          {mode === 'edit' && editing ? (
+          {mode === 'edit' && editing && editing.protectedFromRemoval !== 1 ? (
             <Pressable accessibilityRole="button" disabled={saving} onPress={() => removeTask(editing)} style={styles.removeButton}>
               <Trash2 color={colors.rose} size={17} />
               <Text style={styles.removeText}>Remove</Text>
             </Pressable>
+          ) : null}
+          {mode === 'edit' && editing?.protectedFromRemoval === 1 ? (
+            <Text style={styles.protectedText}>This practice appears on Home. Mark it inactive instead of removing it.</Text>
           ) : null}
         </View>
       ) : null}
@@ -458,10 +462,10 @@ function TaskForm({
       <Field label="Domain">
         <ChoiceGrid choices={domainChoices} selectedId={form.domainId} onSelect={(domainId) => setForm((current) => ({ ...current, domainId }))} />
       </Field>
-      <Field label="Blockers for this practice">
-        <View style={styles.fieldStack}>
+      <View style={styles.fieldStack}>
+        <View style={styles.optionRow}>
           <Toggle
-            label={form.blockersEnabled ? 'Use blockers' : 'No blockers'}
+            label={form.blockersEnabled ? 'Blockers' : 'No blockers'}
             selected={form.blockersEnabled}
             onPress={() =>
               setForm((current) => {
@@ -474,22 +478,22 @@ function TaskForm({
               })
             }
           />
-          {form.blockersEnabled ? (
-            <MultiChoiceGrid
-              choices={options.blockers}
-              selectedIds={form.blockerIds}
-              onChange={(blockerIds) => setForm((current) => ({ ...current, blockerIds }))}
-            />
-          ) : null}
+          <Toggle label={form.allowNote ? 'Note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
+          <Toggle label={form.enabled ? 'Active' : 'Inactive'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
         </View>
-      </Field>
-      <View style={styles.optionRow}>
-        <Toggle label={form.allowNote ? 'Allow note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
-        {reminderPreferences.taskRemindersEnabled ? (
-          <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
+        {form.blockersEnabled ? (
+          <MultiChoiceGrid
+            choices={options.blockers}
+            selectedIds={form.blockerIds}
+            onChange={(blockerIds) => setForm((current) => ({ ...current, blockerIds }))}
+          />
         ) : null}
-        <Toggle label={form.enabled ? 'Active' : 'Hidden'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
       </View>
+      {reminderPreferences.taskRemindersEnabled ? (
+        <View style={styles.optionRow}>
+          <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -651,6 +655,7 @@ const styles = StyleSheet.create({
   choiceText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   choiceTextSelected: { color: colors.blue },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  protectedText: { color: colors.muted, flexBasis: '100%', fontSize: 13, fontWeight: '800', lineHeight: 18 },
   orderButton: {
     alignItems: 'center',
     borderColor: colors.line,

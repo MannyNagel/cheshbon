@@ -1,7 +1,7 @@
 import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import {
@@ -229,6 +229,12 @@ export default function SettingsScreen() {
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
       <TutorialSection />
+      <View style={styles.contactBox}>
+        <Text style={styles.sectionTitle}>Contact</Text>
+        <Pressable accessibilityRole="link" onPress={() => Linking.openURL('mailto:dailycheshbon@gmail.com')}>
+          <Text style={styles.contactEmail}>dailycheshbon@gmail.com</Text>
+        </Pressable>
+      </View>
       <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
       <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
       <ReminderSettings
@@ -741,6 +747,20 @@ const styles = StyleSheet.create({
   cloudMeta: {
     color: colors.muted,
     fontSize: 13,
+  },
+  contactBox: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  contactEmail: {
+    color: colors.blue,
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'left',
   },
   signInBox: {
     gap: spacing.sm,
