@@ -168,6 +168,7 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
 }
 
 export async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {
+  return;
   await seedDatabase(db);
   await db.withTransactionAsync(async () => {
     await db.runAsync(
