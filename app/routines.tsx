@@ -182,7 +182,7 @@ export default function RoutinesScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Routines</Text>
-        <Text style={styles.subtitle}>Routines overlay the year-round core instead of replacing it.</Text>
+        <Text style={styles.subtitle}>Routines cluster practices together to simplify scheduling and aid reflection.</Text>
         <View style={styles.actions}>
           {mode === 'list' ? (
             <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="New routine" onPress={startAdd} />

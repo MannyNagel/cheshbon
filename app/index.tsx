@@ -115,10 +115,10 @@ export default function HomeScreen() {
           <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review complete' : 'Nightly review'}</Text>
           <Text style={styles.panelCopy}>
             {summary.reviewComplete
-              ? 'The day has been reviewed. You can still edit it if something important comes back to mind.'
+              ? 'Your cheshbon is complete for today. You can still edit it if something important comes back to mind.'
               : summary.reviewStarted
                 ? 'Progress is saved. Continue when you are ready, then mark it complete.'
-                : 'Start with the facts of the day, then notice what deserves attention.'}
+                : 'Reviewing your day cultivates real time awareness and helps you stay mindful.'}
           </Text>
         </View>
         <Pressable
@@ -195,7 +195,6 @@ export default function HomeScreen() {
         <View style={styles.sectionTitleRow}>
           <View style={styles.sectionTitleText}>
             <Text style={styles.sectionTitle}>Gratitude Journal</Text>
-            <Text style={styles.sectionMeta}>Past 7 days</Text>
           </View>
           <JournalButton kind="gratitude" label="See all" />
         </View>
@@ -216,8 +215,7 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <View style={styles.sectionTitleRow}>
           <View style={styles.sectionTitleText}>
-            <Text style={styles.sectionTitle}>Thought journal</Text>
-            <Text style={styles.sectionMeta}>Past 7 days</Text>
+            <Text style={styles.sectionTitle}>Thought Journal</Text>
           </View>
           <JournalButton kind="thoughts" label="See all" />
         </View>
