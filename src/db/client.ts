@@ -41,7 +41,6 @@ export async function initializeDatabase() {
   if (!existing?.count) {
     await seedDatabase(db);
   }
-  await syncSeedUpdates(db);
   await normalizeQualityScale(db);
   await normalizeReviewCompletionState(db);
 }

@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
-import { getDb, syncSeedUpdates } from '@/src/db/client';
+import { getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
 import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 import type {
@@ -986,30 +986,11 @@ export async function createTask(input: {
 
 export async function removeTaskFromTodayForward(routinePracticeId: string, fromDate = todayIsoDate()) {
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
-    const row = await db.getFirstAsync<{ practice_id: string }>(
-      'SELECT practice_id FROM routine_practices WHERE id = ?',
-      routinePracticeId,
-    );
-    await db.runAsync(
-      'UPDATE routine_practices SET archived_from = ?, enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      fromDate,
-      routinePracticeId,
-    );
-    if (row?.practice_id) {
-      const entries = await db.getAllAsync<{ id: string }>(
-        'SELECT id FROM daily_entries WHERE user_id = ? AND practice_id = ? AND entry_date >= ?',
-        LOCAL_USER_ID,
-        row.practice_id,
-        fromDate,
-      );
-      for (const entry of entries) {
-        await db.runAsync('DELETE FROM entry_blockers WHERE entry_id = ?', entry.id);
-        await db.runAsync('DELETE FROM entry_metric_values WHERE entry_id = ?', entry.id);
-        await db.runAsync('DELETE FROM daily_entries WHERE id = ?', entry.id);
-      }
-    }
-  });
+  await db.runAsync(
+    'UPDATE routine_practices SET archived_from = ?, enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    fromDate,
+    routinePracticeId,
+  );
 }
 
 export async function moveTaskWithinReviewSection(routinePracticeId: string, direction: 'up' | 'down') {
@@ -1255,8 +1236,6 @@ export async function importAllData(exportJson: string) {
         }
       }
     });
-    await syncSeedUpdates(db);
-    await clearRequiredFlags(db);
     await normalizeQualityScale(db);
     await normalizeReviewCompletionState(db);
   } finally {

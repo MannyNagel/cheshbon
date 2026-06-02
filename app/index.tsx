@@ -1,10 +1,11 @@
-import { Bell, CalendarDays, CheckCircle2, CircleAlert, Flame, NotebookPen } from 'lucide-react-native';
+import { Bell, CalendarDays, CheckCircle2, CircleAlert, Flame, LogIn, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import { getHomeSummary, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
+import { getCloudStatus, type CloudStatus } from '@/src/services/cloudSyncService';
 import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 
 export default function HomeScreen() {
@@ -12,17 +13,23 @@ export default function HomeScreen() {
   const yesterday = addDaysIso(today, -1);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setLoading(true);
-      Promise.all([getHomeSummary(today), getReminderPreferences()])
-        .then(([nextSummary, nextReminderPreferences]) => {
+      Promise.all([
+        getHomeSummary(today),
+        getReminderPreferences(),
+        getCloudStatus().catch(() => ({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null })),
+      ])
+        .then(([nextSummary, nextReminderPreferences, nextCloudStatus]) => {
           if (active) {
             setSummary(nextSummary);
             setReminderPreferences(nextReminderPreferences);
+            setCloudStatus(nextCloudStatus);
           }
         })
         .finally(() => {
@@ -72,7 +79,7 @@ export default function HomeScreen() {
     };
   }, [reminderPreferences, summary, today]);
 
-  if (loading || !summary || !reminderPreferences) {
+  if (loading || !summary || !reminderPreferences || !cloudStatus) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -86,6 +93,19 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {!cloudStatus.signedIn ? (
+        <View style={styles.accountPrompt}>
+          <View style={styles.accountPromptText}>
+            <Text style={styles.accountPromptTitle}>Sign in to your account</Text>
+            <Text style={styles.accountPromptCopy}>Keep your cheshbon available on your phone and computer.</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.accountButton}>
+            <LogIn color="#FFFFFF" size={17} />
+            <Text style={styles.accountButtonText}>Sign in</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.header}>
         <Text style={styles.eyebrow}>{dayName(today)}</Text>
         <Text style={styles.title}>{formatEnglishDate(today)}</Text>
@@ -293,6 +313,47 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     padding: spacing.lg,
     paddingBottom: 96,
+  },
+  accountButton: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: colors.blue,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+  },
+  accountButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  accountPrompt: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.blueSoft,
+    borderColor: '#BFD2F7',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  accountPromptCopy: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'left',
+  },
+  accountPromptText: {
+    gap: spacing.xs,
+  },
+  accountPromptTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'left',
   },
   emptyText: {
     color: colors.muted,
