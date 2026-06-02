@@ -1,19 +1,67 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, BookOpenCheck, CheckCircle2, Hash, MessageSquareText, Sparkles } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Search, X } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { DimensionValue } from 'react-native';
 
+import { TrendPracticeCard } from '@/src/components/TrendPracticeCard';
 import { colors, spacing } from '@/src/components/ui';
-import type { TrendPoint, TrendSummary, TrendWindow } from '@/src/models/types';
+import type { TrendSummary } from '@/src/models/types';
 import { getTrendSummary } from '@/src/services/trendsService';
-import { monthDay } from '@/src/utils/dates';
+
+type SortBy = 'domain' | 'name' | 'kind';
+type KindFilter = 'all' | TrendSummary['practiceTrends'][number]['metricKind'];
 
 export default function TrendsScreen() {
   const [summary, setSummary] = useState<TrendSummary | null>(null);
+  const [query, setQuery] = useState('');
+  const [sortBy, setSortBy] = useState<SortBy>('domain');
+  const [domainFilter, setDomainFilter] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+  const [selectedPracticeIds, setSelectedPracticeIds] = useState<string[]>([]);
 
   useEffect(() => {
     getTrendSummary().then(setSummary);
   }, []);
+
+  const filteredPractices = useMemo(() => {
+    if (!summary) return [];
+    const normalizedQuery = query.trim().toLowerCase();
+    return [...summary.practiceTrends]
+      .filter((practice) => domainFilter === 'all' || practice.domainId === domainFilter)
+      .filter((practice) => kindFilter === 'all' || practice.metricKind === kindFilter)
+      .filter((practice) => {
+        if (!normalizedQuery) return true;
+        return `${practice.practiceName} ${practice.domainName} ${practice.metricName}`.toLowerCase().includes(normalizedQuery);
+      })
+      .sort((a, b) => {
+        if (sortBy === 'name') return a.practiceName.localeCompare(b.practiceName);
+        if (sortBy === 'kind') return a.metricKind.localeCompare(b.metricKind) || a.practiceName.localeCompare(b.practiceName);
+        return a.domainName.localeCompare(b.domainName) || a.practiceName.localeCompare(b.practiceName);
+      });
+  }, [domainFilter, kindFilter, query, sortBy, summary]);
+
+  const selectedPractices = useMemo(() => {
+    if (!summary) return [];
+    return selectedPracticeIds
+      .map((practiceId) => summary.practiceTrends.find((practice) => practice.practiceId === practiceId))
+      .filter((practice): practice is TrendSummary['practiceTrends'][number] => practice != null);
+  }, [selectedPracticeIds, summary]);
+  const domainChoices = useMemo(() => {
+    if (!summary) return [];
+    const map = new Map<string, { domainId: string; domainName: string }>();
+    for (const domain of summary.domainInsights) {
+      map.set(domain.domainId, { domainId: domain.domainId, domainName: domain.domainName });
+    }
+    for (const practice of summary.practiceTrends) {
+      map.set(practice.domainId, { domainId: practice.domainId, domainName: practice.domainName });
+    }
+    return [...map.values()].sort((a, b) => a.domainName.localeCompare(b.domainName));
+  }, [summary]);
+
+  function togglePractice(practiceId: string) {
+    setSelectedPracticeIds((current) => current.includes(practiceId) ? current.filter((id) => id !== practiceId) : [...current, practiceId]);
+  }
 
   if (!summary) {
     return (
@@ -23,119 +71,114 @@ export default function TrendsScreen() {
     );
   }
 
-  const metricPractices = summary.practiceTrends.filter((practice) => practice.metricKind !== 'text');
-  const textPractices = summary.practiceTrends.filter((practice) => practice.metricKind === 'text');
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Metrics</Text>
         <Text style={styles.title}>Trends</Text>
-        <Text style={styles.subtitle}>
-          Blended signals without reducing the work to one score: quality stays 1-5, completion becomes a 1-5 equivalent, and text stays textual.
-        </Text>
+        <Text style={styles.subtitle}>Start with a domain, then choose the practices you want to inspect. Nothing expands until you select it.</Text>
       </View>
 
-      <Section title="Domain Signal">
-        {summary.domainInsights.length ? (
+      <Section title="Domains">
+        {domainChoices.length ? (
           <View style={styles.domainGrid}>
-            {summary.domainInsights.map((domain) => (
-              <View key={domain.domainId} style={styles.domainCard}>
-                <View style={styles.rowHeader}>
-                  <Text style={styles.rowTitle}>{domain.domainName}</Text>
-                  <DirectionIcon direction={domain.direction} />
-                </View>
-                <Text style={styles.scoreText}>{formatScore(domain.score7)}</Text>
-                <Text style={styles.rowMeta}>
-                  7 day blend | 30 day {formatScore(domain.score30)} | {domain.trackedPractices} practices
-                </Text>
-                <Meter value={domain.score7} max={5} />
-              </View>
-            ))}
+            {domainChoices.map((domain) => {
+              const insight = summary.domainInsights.find((item) => item.domainId === domain.domainId);
+              const trackedPractices = insight?.trackedPractices ?? summary.practiceTrends.filter((practice) => practice.domainId === domain.domainId).length;
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  key={domain.domainId}
+                  onPress={() => router.push({ pathname: '/domain-trends/[domainId]', params: { domainId: domain.domainId } })}
+                  style={styles.domainCard}
+                >
+                  <View style={styles.rowHeader}>
+                    <Text style={styles.rowTitle}>{domain.domainName}</Text>
+                    <DirectionIcon direction={insight?.direction ?? 'insufficient'} />
+                  </View>
+                  <Text style={styles.scoreText}>{formatScore(insight?.score7 ?? null)}</Text>
+                  <Text style={styles.rowMeta}>
+                    Week blend | Month {formatScore(insight?.score30 ?? null)} | {trackedPractices} practices
+                  </Text>
+                  <Meter value={insight?.score7 ?? null} max={5} />
+                  <Text style={styles.domainLink}>Open domain</Text>
+                </Pressable>
+              );
+            })}
           </View>
         ) : (
           <Empty text="Complete a few reviews and domain patterns will start to appear." />
         )}
       </Section>
 
-      <Section title="Tefillah Unit">
-        {summary.prayerUnit ? (
-          <View style={styles.panel}>
-            <View style={styles.rowHeader}>
-              <View style={styles.iconTitle}>
-                <BookOpenCheck color={colors.green} size={20} />
-                <Text style={styles.panelTitle}>Shacharit · Mincha · Maariv</Text>
-              </View>
-              <Text style={styles.scoreText}>{formatScore(summary.prayerUnit.score7)}</Text>
-            </View>
-            <Text style={styles.rowMeta}>Combined 7 day blend | 30 day {formatScore(summary.prayerUnit.score30)}</Text>
-            <MiniChart
-              max={5}
-              points={summary.prayerUnit.parts.map((part) => ({
-                label: part.practiceName.slice(0, 3),
-                value: part.score7,
-              }))}
+      <Section title="Find Practices">
+        <View style={styles.filterPanel}>
+          <View style={styles.searchRow}>
+            <Search color={colors.muted} size={18} />
+            <TextInput
+              onChangeText={setQuery}
+              placeholder="Search practices"
+              placeholderTextColor={colors.muted}
+              style={styles.searchInput}
+              value={query}
             />
-            <View style={styles.prayerParts}>
-              {summary.prayerUnit.parts.map((part) => (
-                <View key={part.practiceId} style={styles.partPill}>
-                  <Text style={styles.partName}>{part.practiceName}</Text>
-                  <Text style={styles.partScore}>{formatScore(part.score7)}</Text>
-                </View>
-              ))}
-            </View>
+            {query ? (
+              <Pressable accessibilityRole="button" onPress={() => setQuery('')} style={styles.clearButton}>
+                <X color={colors.ink} size={16} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <ChipRow label="Sort">
+            <FilterChip label="Domain" selected={sortBy === 'domain'} onPress={() => setSortBy('domain')} />
+            <FilterChip label="Name" selected={sortBy === 'name'} onPress={() => setSortBy('name')} />
+            <FilterChip label="Type" selected={sortBy === 'kind'} onPress={() => setSortBy('kind')} />
+          </ChipRow>
+
+          <ChipRow label="Type">
+            <FilterChip label="All" selected={kindFilter === 'all'} onPress={() => setKindFilter('all')} />
+            <FilterChip label="Quality" selected={kindFilter === 'quality'} onPress={() => setKindFilter('quality')} />
+            <FilterChip label="Complete" selected={kindFilter === 'complete'} onPress={() => setKindFilter('complete')} />
+            <FilterChip label="Number" selected={kindFilter === 'number'} onPress={() => setKindFilter('number')} />
+            <FilterChip label="Text" selected={kindFilter === 'text'} onPress={() => setKindFilter('text')} />
+          </ChipRow>
+
+          <ChipRow label="Domain">
+            <FilterChip label="All" selected={domainFilter === 'all'} onPress={() => setDomainFilter('all')} />
+            {domainChoices.map((domain) => (
+              <FilterChip key={domain.domainId} label={domain.domainName} selected={domainFilter === domain.domainId} onPress={() => setDomainFilter(domain.domainId)} />
+            ))}
+          </ChipRow>
+
+          <View style={styles.practiceChipWrap}>
+            {filteredPractices.map((practice) => (
+              <Pressable
+                accessibilityRole="button"
+                key={practice.practiceId}
+                onPress={() => togglePractice(practice.practiceId)}
+                style={[styles.practiceChip, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipSelected]}
+              >
+                <Text style={[styles.practiceChipText, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipTextSelected]}>{practice.practiceName}</Text>
+                <Text style={[styles.practiceChipMeta, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipTextSelected]}>{practice.domainName} | {kindLabel(practice.metricKind)}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {selectedPracticeIds.length ? (
+            <Pressable accessibilityRole="button" onPress={() => setSelectedPracticeIds([])} style={styles.resetButton}>
+              <Text style={styles.resetText}>Clear selected</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </Section>
+
+      <Section title="Selected Practices">
+        {selectedPractices.length ? (
+          <View style={styles.practiceList}>
+            {selectedPractices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} />)}
           </View>
         ) : (
-          <Empty text="Prayer trends will appear after Shacharit, Mincha, or Maariv have entries." />
-        )}
-      </Section>
-
-      <Section title="Per Practice">
-        {metricPractices.length ? (
-          metricPractices.map((practice) => (
-            <View key={`${practice.practiceId}-${practice.metricName}`} style={styles.practiceCard}>
-              <View style={styles.rowHeader}>
-                <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>{practice.practiceName}</Text>
-                  <Text style={styles.rowMeta}>{practice.domainName} | {practice.metricName}</Text>
-                </View>
-                <MetricKindBadge kind={practice.metricKind} />
-              </View>
-              <View style={styles.windowGrid}>
-                <TrendBlock title="Week" unitLabel={practice.unitLabel} window={practice.week} />
-                <TrendBlock title="Month" unitLabel={practice.unitLabel} window={practice.month} />
-                <TrendBlock title="All time" unitLabel={practice.unitLabel} window={practice.allTime} />
-              </View>
-            </View>
-          ))
-        ) : (
-          <Empty text="Numeric, completion, and quality practice trends will appear here." />
-        )}
-      </Section>
-
-      <Section title="Text Entries">
-        {textPractices.length ? (
-          textPractices.map((practice) => (
-            <View key={`${practice.practiceId}-${practice.metricName}`} style={styles.practiceCard}>
-              <View style={styles.iconTitle}>
-                <MessageSquareText color={colors.blue} size={20} />
-                <View style={styles.rowText}>
-                  <Text style={styles.rowTitle}>{practice.practiceName}</Text>
-                  <Text style={styles.rowMeta}>{practice.domainName} | recent entries</Text>
-                </View>
-              </View>
-              <View style={styles.textList}>
-                {practice.recentEntries.map((entry) => (
-                  <View key={`${practice.practiceId}-${entry.date}-${entry.text}`} style={styles.textEntry}>
-                    <Text style={styles.textDate}>{monthDay(entry.date)}</Text>
-                    <Text style={styles.textValue}>{entry.text}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))
-        ) : (
-          <Empty text="Text practices will show recent entries instead of a graph." />
+          <Empty text="Select one or more practice chips to see weekly, monthly, and all-time stats. Text practices show recent entries." />
         )}
       </Section>
 
@@ -166,34 +209,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function TrendBlock({ title, window, unitLabel }: { title: string; window: TrendWindow; unitLabel: string }) {
-  const max = unitLabel === '%' ? 100 : Math.max(5, ...window.points.map((point) => point.value ?? 0));
+function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <View style={styles.trendBlock}>
-      <View style={styles.trendHeader}>
-        <Text style={styles.trendTitle}>{title}</Text>
-        <Text style={styles.trendAverage}>{formatWindowAverage(window.average, unitLabel)}</Text>
-      </View>
-      <MiniChart points={window.points} max={max} />
-      <Text style={styles.rowMeta}>{window.sampleSize} entries</Text>
+    <View style={styles.chipRow}>
+      <Text style={styles.chipRowLabel}>{label}</Text>
+      <View style={styles.chipWrap}>{children}</View>
     </View>
   );
 }
 
-function MiniChart({ points, max }: { points: TrendPoint[]; max: number }) {
-  if (!points.length) return <Text style={styles.emptySmall}>No graph yet</Text>;
+function FilterChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
-    <View style={styles.chart}>
-      {points.map((point, index) => {
-        const height = point.value == null || max <= 0 ? 4 : Math.max(4, Math.min(70, (point.value / max) * 70));
-        return (
-          <View key={`${point.label}-${index}`} style={styles.chartColumn}>
-            <View style={[styles.bar, { height }, point.value == null && styles.barEmpty]} />
-            <Text style={styles.chartLabel}>{point.label}</Text>
-          </View>
-        );
-      })}
-    </View>
+    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.filterChip, selected && styles.filterChipSelected]}>
+      <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -212,20 +241,6 @@ function DirectionIcon({ direction }: { direction: TrendSummary['domainInsights'
   return <ArrowRight color={colors.muted} size={21} />;
 }
 
-function MetricKindBadge({ kind }: { kind: TrendSummary['practiceTrends'][number]['metricKind'] }) {
-  const icon =
-    kind === 'complete' ? <CheckCircle2 color={colors.green} size={17} /> :
-      kind === 'number' ? <Hash color={colors.blue} size={17} /> :
-        <Sparkles color={colors.amber} size={17} />;
-  const label = kind === 'complete' ? 'complete' : kind === 'number' ? 'number' : 'quality';
-  return (
-    <View style={styles.kindBadge}>
-      {icon}
-      <Text style={styles.kindText}>{label}</Text>
-    </View>
-  );
-}
-
 function Empty({ text }: { text: string }) {
   return <Text style={styles.empty}>{text}</Text>;
 }
@@ -234,21 +249,14 @@ function formatScore(value: number | null) {
   return value == null ? 'n/a' : `${value.toFixed(1)}/5`;
 }
 
-function formatWindowAverage(value: number | null, unitLabel: string) {
-  if (value == null) return 'n/a';
-  if (unitLabel === '%') return `${Math.round(value)}%`;
-  return value.toFixed(1);
+function kindLabel(kind: TrendSummary['practiceTrends'][number]['metricKind']) {
+  if (kind === 'complete') return 'complete';
+  if (kind === 'number') return 'number';
+  if (kind === 'text') return 'text';
+  return 'quality';
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    backgroundColor: colors.blue,
-    borderRadius: 4,
-    width: 14,
-  },
-  barEmpty: {
-    backgroundColor: colors.softLine,
-  },
   blockerCount: {
     color: colors.blue,
     fontSize: 15,
@@ -281,24 +289,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  chart: {
-    alignItems: 'flex-end',
+  chipRow: {
+    gap: spacing.sm,
+  },
+  chipRowLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  chipWrap: {
     flexDirection: 'row',
-    gap: spacing.xs,
-    height: 92,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  chartColumn: {
+  clearButton: {
     alignItems: 'center',
-    flex: 1,
-    gap: spacing.xs,
-    justifyContent: 'flex-end',
-    minWidth: 18,
-  },
-  chartLabel: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'center',
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
   },
   container: {
     backgroundColor: colors.paper,
@@ -321,16 +330,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md,
   },
+  domainLink: {
+    color: colors.blue,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
   empty: {
     color: colors.muted,
     fontSize: 15,
     lineHeight: 21,
-    textAlign: 'left',
-  },
-  emptySmall: {
-    color: colors.muted,
-    fontSize: 12,
-    minHeight: 92,
     textAlign: 'left',
   },
   eyebrow: {
@@ -340,30 +349,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase',
   },
-  header: {
-    gap: spacing.sm,
+  filterChip: {
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  iconTitle: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
+  filterChipSelected: {
+    backgroundColor: colors.blueSoft,
+    borderColor: colors.blue,
   },
-  kindBadge: {
-    alignItems: 'center',
-    backgroundColor: colors.paper,
+  filterChipText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  filterChipTextSelected: {
+    color: colors.blue,
+  },
+  filterPanel: {
+    backgroundColor: colors.surface,
     borderColor: colors.softLine,
     borderRadius: 8,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 36,
-    paddingHorizontal: spacing.sm,
+    gap: spacing.md,
+    padding: spacing.lg,
   },
-  kindText: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+  header: {
+    gap: spacing.sm,
   },
   meterFill: {
     backgroundColor: colors.green,
@@ -376,50 +390,54 @@ const styles = StyleSheet.create({
     height: 8,
     overflow: 'hidden',
   },
-  panel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.lg,
-  },
-  panelTitle: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'left',
-  },
-  partName: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  partPill: {
-    backgroundColor: colors.greenSoft,
-    borderColor: colors.green,
+  practiceChip: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
     gap: spacing.xs,
-    padding: spacing.sm,
+    minWidth: 142,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
-  partScore: {
-    color: colors.green,
-    fontSize: 16,
+  practiceChipMeta: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  practiceChipSelected: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.green,
+  },
+  practiceChipText: {
+    color: colors.ink,
+    fontSize: 14,
     fontWeight: '900',
+    textAlign: 'left',
   },
-  prayerParts: {
+  practiceChipTextSelected: {
+    color: colors.green,
+  },
+  practiceChipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  practiceCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
+  practiceList: {
+    gap: spacing.md,
+  },
+  resetButton: {
+    alignSelf: 'flex-start',
+    borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    gap: spacing.lg,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  resetText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
   },
   rowHeader: {
     alignItems: 'flex-start',
@@ -433,10 +451,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'left',
   },
-  rowText: {
-    flex: 1,
-    gap: spacing.xs,
-  },
   rowTitle: {
     color: colors.ink,
     fontSize: 16,
@@ -448,6 +462,24 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '900',
     textAlign: 'left',
+  },
+  searchInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 42,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  searchRow: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   section: {
     gap: spacing.md,
@@ -465,64 +497,10 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     textAlign: 'left',
   },
-  textDate: {
-    color: colors.green,
-    fontSize: 13,
-    fontWeight: '900',
-    minWidth: 74,
-    textAlign: 'left',
-  },
-  textEntry: {
-    borderTopColor: colors.softLine,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  textList: {
-    gap: 0,
-  },
-  textValue: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'left',
-  },
   title: {
     color: colors.ink,
     fontSize: 32,
     fontWeight: '900',
     textAlign: 'left',
-  },
-  trendAverage: {
-    color: colors.blue,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  trendBlock: {
-    backgroundColor: colors.paper,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    gap: spacing.sm,
-    minWidth: 190,
-    padding: spacing.md,
-  },
-  trendHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  trendTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  windowGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
   },
 });

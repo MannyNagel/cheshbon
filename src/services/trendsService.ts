@@ -69,7 +69,6 @@ export async function getTrendSummary(): Promise<TrendSummary> {
   ]);
 
   const domainInsights = buildDomainInsights(scores7, scores30);
-  const prayerUnit = buildPrayerUnit(scores7, scores30);
   const practiceTrends = [];
   for (const practice of practices) {
     const trend = await buildPracticeTrend(practice);
@@ -78,7 +77,6 @@ export async function getTrendSummary(): Promise<TrendSummary> {
 
   return {
     domainInsights,
-    prayerUnit,
     practiceTrends,
     commonBlockers: commonBlockers.map((row) => ({
       blockerId: row.blocker_id,
@@ -213,27 +211,6 @@ function buildDomainInsights(scores7: ScoreValue[], scores30: ScoreValue[]): Tre
   });
 }
 
-function buildPrayerUnit(scores7: ScoreValue[], scores30: ScoreValue[]): TrendSummary['prayerUnit'] {
-  const prayerNames = ['shacharit', 'mincha', 'maariv'];
-  const parts = prayerNames.map((name) => {
-    const seven = scores7.find((score) => score.practiceName.toLowerCase() === name);
-    const thirty = scores30.find((score) => score.practiceName.toLowerCase() === name);
-    if (!seven && !thirty) return null;
-    return {
-      practiceId: seven?.practiceId ?? thirty?.practiceId ?? name,
-      practiceName: seven?.practiceName ?? thirty?.practiceName ?? name,
-      score7: round1(seven?.value ?? null),
-      score30: round1(thirty?.value ?? null),
-    };
-  }).filter((part): part is NonNullable<typeof part> => part != null);
-  if (!parts.length) return null;
-  return {
-    score7: round1(average(parts.map((part) => part.score7).filter((value): value is number => value != null))),
-    score30: round1(average(parts.map((part) => part.score30).filter((value): value is number => value != null))),
-    parts,
-  };
-}
-
 async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[number]): Promise<TrendSummary['practiceTrends'][number] | null> {
   const textMetric = practice.metrics.find((metric) => metric.type === 'text');
   const numberMetric = practice.metrics.find((metric) => metric.type === 'number');
@@ -249,6 +226,7 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
     return {
       practiceId: practice.practiceId,
       practiceName: practice.practiceName,
+      domainId: practice.domainId,
       domainName: practice.domainName,
       metricName: metric.name,
       metricKind: 'text',
@@ -266,6 +244,7 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
     return {
       practiceId: practice.practiceId,
       practiceName: practice.practiceName,
+      domainId: practice.domainId,
       domainName: practice.domainName,
       metricName: metric.name,
       metricKind: 'complete',
@@ -282,6 +261,7 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
   return {
     practiceId: practice.practiceId,
     practiceName: practice.practiceName,
+    domainId: practice.domainId,
     domainName: practice.domainName,
     metricName: metric.name,
     metricKind: metric.type === 'number' ? 'number' : 'quality',

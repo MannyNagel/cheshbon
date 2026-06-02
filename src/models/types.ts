@@ -131,19 +131,10 @@ export type TrendSummary = {
     trackedPractices: number;
     direction: 'up' | 'down' | 'steady' | 'insufficient';
   }>;
-  prayerUnit: {
-    score7: number | null;
-    score30: number | null;
-    parts: Array<{
-      practiceId: string;
-      practiceName: string;
-      score7: number | null;
-      score30: number | null;
-    }>;
-  } | null;
   practiceTrends: Array<{
     practiceId: string;
     practiceName: string;
+    domainId: string;
     domainName: string;
     metricName: string;
     metricKind: 'complete' | 'number' | 'quality' | 'text';
