@@ -71,6 +71,8 @@ export default function RootLayout() {
           }}
         />
         <Tabs.Screen name="review/[date]" options={{ href: null, title: 'Review' }} />
+        <Tabs.Screen name="journal/[kind]" options={{ href: null, title: 'Journal' }} />
+        <Tabs.Screen name="learn-more" options={{ href: null, title: 'Learn more' }} />
       </Tabs>
     </SafeAreaProvider>
   );

@@ -57,6 +57,9 @@ export type HomeSummary = {
   thoughtJournal: Array<{ date: string; practiceName: string; text: string }>;
 };
 
+export type JournalKind = 'gratitude' | 'thoughts';
+export type JournalEntry = { date: string; practiceName: string; text: string };
+
 export async function getReminderPreferences(): Promise<ReminderPreferences> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ key: string; value: string }>(
@@ -127,51 +130,8 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     'SELECT COUNT(*) as count FROM daily_entries WHERE user_id = ?',
     LOCAL_USER_ID,
   );
-  const recentGratitude = await db.getAllAsync<{ entry_date: string; gratitude_text: string }>(
-    `SELECT de.entry_date,
-      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as gratitude_text
-     FROM daily_entries de
-     JOIN practices p ON p.id = de.practice_id
-     LEFT JOIN metrics m ON m.practice_id = p.id
-      AND m.metric_type = 'text'
-      AND m.active = 1
-     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
-      AND emv.metric_id = m.id
-     WHERE de.user_id = ?
-      AND de.entry_date >= ?
-      AND de.entry_date <= ?
-      AND (p.id = 'practice_gratitude' OR LOWER(p.name) = 'gratitude')
-      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
-     ORDER BY de.entry_date DESC
-     LIMIT 5`,
-    LOCAL_USER_ID,
-    sevenDaysAgo,
-    reviewDate,
-  );
-  const thoughtJournal = await db.getAllAsync<{ entry_date: string; practice_name: string; thought_text: string }>(
-    `SELECT de.entry_date,
-      p.name as practice_name,
-      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as thought_text
-     FROM daily_entries de
-     JOIN practices p ON p.id = de.practice_id
-     LEFT JOIN metrics m ON m.practice_id = p.id
-      AND m.metric_type = 'text'
-      AND m.active = 1
-     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
-      AND emv.metric_id = m.id
-     WHERE de.user_id = ?
-      AND de.entry_date < ?
-      AND (
-        p.id = 'practice_daily_thoughts'
-        OR LOWER(p.name) LIKE '%thought%'
-        OR LOWER(p.name) LIKE '%reflection%'
-      )
-      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
-     ORDER BY de.entry_date DESC
-     LIMIT 30`,
-    LOCAL_USER_ID,
-    reviewDate,
-  );
+  const recentGratitude = await getJournalEntries('gratitude', { startDate: sevenDaysAgo, endDate: reviewDate, limit: 5 });
+  const thoughtJournal = await getJournalEntries('thoughts', { startDate: sevenDaysAgo, endDate: reviewDate, limit: 5 });
 
   return {
     reviewStarted: Boolean(session),
@@ -180,9 +140,62 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     reviewedPractices: reviewed?.count ?? 0,
     currentAvodah: await getCurrentAvodahSummary(db, reviewDate),
     morningReminder: await getMorningReminderSummary(db, reviewDate),
-    recentGratitude: recentGratitude.map((row) => ({ date: row.entry_date, text: row.gratitude_text })),
-    thoughtJournal: thoughtJournal.map((row) => ({ date: row.entry_date, practiceName: row.practice_name, text: row.thought_text })),
+    recentGratitude: recentGratitude.map((entry) => ({ date: entry.date, text: entry.text })),
+    thoughtJournal,
   };
+}
+
+export async function getJournalEntries(
+  kind: JournalKind,
+  options: { startDate?: string; endDate?: string; date?: string; limit?: number } = {},
+): Promise<JournalEntry[]> {
+  const db = await getDb();
+  const filters: string[] = ['de.user_id = ?'];
+  const args: Array<string | number> = [LOCAL_USER_ID];
+
+  if (options.date) {
+    filters.push('de.entry_date = ?');
+    args.push(options.date);
+  } else {
+    if (options.startDate) {
+      filters.push('de.entry_date >= ?');
+      args.push(options.startDate);
+    }
+    if (options.endDate) {
+      filters.push('de.entry_date <= ?');
+      args.push(options.endDate);
+    }
+  }
+
+  if (kind === 'gratitude') {
+    filters.push("(p.id = 'practice_gratitude' OR LOWER(p.name) = 'gratitude')");
+  } else {
+    filters.push(
+      "(p.id = 'practice_daily_thoughts' OR LOWER(p.name) LIKE '%thought%' OR LOWER(p.name) LIKE '%reflection%')",
+    );
+  }
+  filters.push("COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL");
+  const limit = Math.max(1, Math.min(options.limit ?? 200, 500));
+
+  const rows = await db.getAllAsync<{ entry_date: string; practice_name: string; entry_text: string }>(
+    `SELECT de.entry_date,
+      p.name as practice_name,
+      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as entry_text
+     FROM daily_entries de
+     JOIN practices p ON p.id = de.practice_id
+     LEFT JOIN metrics m ON m.practice_id = p.id
+      AND m.metric_type = 'text'
+      AND m.active = 1
+     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.metric_id = m.id
+     WHERE ${filters.join(' AND ')}
+     ORDER BY de.entry_date DESC
+     LIMIT ?`,
+    ...args,
+    limit,
+  );
+
+  return rows.map((row) => ({ date: row.entry_date, practiceName: row.practice_name, text: row.entry_text }));
 }
 
 async function getMorningReminderSummary(db: Awaited<ReturnType<typeof getDb>>, reviewDate: string) {

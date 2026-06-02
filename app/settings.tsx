@@ -1,4 +1,5 @@
 import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -444,13 +445,18 @@ function TutorialSection() {
   ];
   return (
     <View style={styles.section}>
-      <Pressable accessibilityRole="button" onPress={() => setOpen((value) => !value)} style={styles.tutorialHeader}>
-        <View style={styles.reminderTitleRow}>
-          <BookOpen color={colors.blue} size={18} />
-          <Text style={styles.sectionTitle}>Tutorial</Text>
-        </View>
-        {open ? <ChevronUp color={colors.ink} size={19} /> : <ChevronDown color={colors.ink} size={19} />}
-      </Pressable>
+      <View style={styles.tutorialTopRow}>
+        <Pressable accessibilityRole="button" onPress={() => setOpen((value) => !value)} style={[styles.tutorialHeader, styles.tutorialHeaderMain]}>
+          <View style={styles.reminderTitleRow}>
+            <BookOpen color={colors.blue} size={18} />
+            <Text style={styles.sectionTitle}>Tutorial</Text>
+          </View>
+          {open ? <ChevronUp color={colors.ink} size={19} /> : <ChevronDown color={colors.ink} size={19} />}
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/learn-more')} style={styles.learnMoreButton}>
+          <Text style={styles.learnMoreText}>Learn more</Text>
+        </Pressable>
+      </View>
       {open ? (
         <View style={styles.tutorialBox}>
           {tutorialCards.map((card, index) => (
@@ -908,6 +914,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     minHeight: 52,
     paddingHorizontal: spacing.md,
+  },
+  tutorialHeaderMain: {
+    flex: 1,
+    minWidth: 190,
+  },
+  tutorialTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  learnMoreButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blue,
+    borderRadius: 8,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: spacing.lg,
+  },
+  learnMoreText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
   },
   tutorialText: {
     color: colors.muted,

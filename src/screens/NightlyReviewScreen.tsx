@@ -1,5 +1,5 @@
 import { CalendarDays, CheckCircle2, Save, SkipBack, SkipForward } from 'lucide-react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -96,6 +96,7 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
       ]);
       setSavedDates(nextSavedDates);
       setStreak(nextStreak);
+      router.replace('/');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save review');
     } finally {

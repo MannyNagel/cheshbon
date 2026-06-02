@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, CheckCircle2, CircleAlert, Flame, LogIn, NotebookPen } from 'lucide-react-native';
+import { Bell, CalendarDays, Flame, LogIn, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -87,8 +87,6 @@ export default function HomeScreen() {
     );
   }
 
-  const statusColor = summary.reviewComplete ? colors.green : colors.amber;
-  const statusBackground = summary.reviewComplete ? colors.greenSoft : colors.amberSoft;
   const hasMorningReminder = reminderPreferences.morningReminderEnabled && Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
 
   return (
@@ -110,12 +108,6 @@ export default function HomeScreen() {
         <Text style={styles.eyebrow}>{dayName(today)}</Text>
         <Text style={styles.title}>{formatEnglishDate(today)}</Text>
         <Text style={styles.hebrewDate}>{formatHebrewDate(today)}</Text>
-        <View style={[styles.statusPill, { backgroundColor: statusBackground }]}>
-          {summary.reviewComplete ? <CheckCircle2 color={statusColor} size={18} /> : <CircleAlert color={statusColor} size={18} />}
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            Today&apos;s review: {summary.reviewComplete ? 'complete' : 'incomplete'}
-          </Text>
-        </View>
       </View>
 
       <View style={styles.primaryPanel}>
@@ -173,18 +165,6 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Past daily reviews</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => openReview(yesterday)}
-          style={styles.secondaryButton}
-        >
-          <CalendarDays color={colors.ink} size={17} />
-          <Text style={styles.secondaryButtonText}>Go to yesterday&apos;s review</Text>
-        </Pressable>
-      </View>
-
       {summary.currentAvodah.length ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Current Avodah</Text>
@@ -200,8 +180,25 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>What I have been grateful for recently</Text>
-        <Text style={styles.sectionMeta}>Past 7 days</Text>
+        <Text style={styles.sectionTitle}>Past daily reviews</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => openReview(yesterday)}
+          style={styles.secondaryButton}
+        >
+          <CalendarDays color={colors.ink} size={17} />
+          <Text style={styles.secondaryButtonText}>Go to yesterday&apos;s review</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleText}>
+            <Text style={styles.sectionTitle}>Gratitude Journal</Text>
+            <Text style={styles.sectionMeta}>Past 7 days</Text>
+          </View>
+          <JournalButton kind="gratitude" label="See all" />
+        </View>
         {summary.recentGratitude.length ? (
           <View style={styles.gratitudeList}>
             {summary.recentGratitude.map((item) => (
@@ -217,8 +214,13 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Thought journal</Text>
-        <Text style={styles.sectionMeta}>Previous days</Text>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleText}>
+            <Text style={styles.sectionTitle}>Thought journal</Text>
+            <Text style={styles.sectionMeta}>Past 7 days</Text>
+          </View>
+          <JournalButton kind="thoughts" label="See all" />
+        </View>
         {summary.thoughtJournal.length ? (
           <View style={styles.journalList}>
             {summary.thoughtJournal.map((item) => (
@@ -246,6 +248,18 @@ export default function HomeScreen() {
 
 function openReview(date: string) {
   router.push({ pathname: '/review/[date]', params: { date } });
+}
+
+function JournalButton({ kind, label }: { kind: 'gratitude' | 'thoughts'; label: string }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/journal/[kind]', params: { kind } })}
+      style={styles.secondaryButton}
+    >
+      <Text style={styles.secondaryButtonText}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function morningReminderText(summary: HomeSummary) {
@@ -565,6 +579,18 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'left',
   },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  sectionTitleText: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 180,
+  },
   statBox: {
     backgroundColor: colors.surface,
     borderColor: colors.softLine,
@@ -589,20 +615,6 @@ const styles = StyleSheet.create({
   statValue: {
     color: colors.ink,
     fontSize: 28,
-    fontWeight: '900',
-    textAlign: 'left',
-  },
-  statusPill: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: 8,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  statusText: {
-    fontSize: 14,
     fontWeight: '900',
     textAlign: 'left',
   },
