@@ -76,7 +76,7 @@ export default function TrendsScreen() {
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Metrics</Text>
         <Text style={styles.title}>Trends</Text>
-        <Text style={styles.subtitle}>Start with a domain, then choose the practices you want to inspect. Nothing expands until you select it.</Text>
+        <Text style={styles.subtitle}>See how you practices are developing over time.</Text>
       </View>
 
       <Section title="Domains">

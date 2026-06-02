@@ -105,14 +105,14 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={styles.header}>
+        <Text style={styles.title}>{'Cheshbon Hanefesh'}</Text>
         <Text style={styles.eyebrow}>{dayName(today)}</Text>
-        <Text style={styles.title}>{formatEnglishDate(today)}</Text>
-        <Text style={styles.hebrewDate}>{formatHebrewDate(today)}</Text>
+        <Text style={styles.hebrewDate}>{formatEnglishDate(today)} | {formatHebrewDate(today)}</Text>
       </View>
 
       <View style={styles.primaryPanel}>
         <View style={styles.primaryText}>
-          <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review complete' : 'Nightly review'}</Text>
+          <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review Complete' : 'Nightly Review'}</Text>
           <Text style={styles.panelCopy}>
             {summary.reviewComplete
               ? 'Your cheshbon is complete for today. You can still edit it if something important comes back to mind.'

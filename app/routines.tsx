@@ -18,7 +18,7 @@ import {
 } from '@/src/repositories/cheshbonRepo';
 import { getActiveRoutinesForDate } from '@/src/services/activeRoutineService';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
-import { todayIsoDate } from '@/src/utils/dates';
+import { monthDay, todayIsoDate } from '@/src/utils/dates';
 
 const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Shabbos'];
 const allDays = [0, 1, 2, 3, 4, 5, 6];
@@ -278,66 +278,75 @@ export default function RoutinesScreen() {
               <View style={styles.sectionBlock}>
                 <Text style={styles.panelTitle}>When this routine applies</Text>
                 <Text style={styles.helperText}>Choose the days of the week first. Add a specific date range only when this routine applies during a limited stretch of time.</Text>
-                {editRoutine.schedules.map((schedule) => (
-                  <View key={schedule.id} style={styles.scheduleEditor}>
-                    <Text style={styles.scheduleHint}>{formatRange(schedule.startDate, schedule.endDate)}</Text>
-                    <DayChips days={schedule.daysOfWeek} onToggle={(day) => toggleDay(schedule.id, schedule.daysOfWeek, day)} />
-                    {editingScheduleDates[schedule.id] ? (
-                      <View style={styles.datePair}>
-                        <TextInput
-                          defaultValue={schedule.startDate ?? ''}
-                          onEndEditing={async (event) => {
-                            await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
-                            setMessage(await syncedMessage('Date range updated.'));
-                            await load();
-                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                          }}
-                          placeholder="Start date YYYY-MM-DD"
-                          placeholderTextColor={colors.muted}
-                          style={styles.scheduleInput}
-                        />
-                        <TextInput
-                          defaultValue={schedule.endDate ?? ''}
-                          onEndEditing={async (event) => {
-                            await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
-                            setMessage(await syncedMessage('Date range updated.'));
-                            await load();
-                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                          }}
-                          placeholder="End date YYYY-MM-DD"
-                          placeholderTextColor={colors.muted}
-                          style={styles.scheduleInput}
-                        />
-                      </View>
-                    ) : null}
-                    <ActionButton
-                      icon={editingScheduleDates[schedule.id] ? <X color={colors.ink} size={16} /> : <CirclePlus color={colors.blue} size={16} />}
-                      label={editingScheduleDates[schedule.id] ? 'Done with dates' : schedule.startDate || schedule.endDate ? 'Edit specific range' : 'Choose specific range'}
-                      onPress={() => setEditingScheduleDates((current) => ({ ...current, [schedule.id]: !current[schedule.id] }))}
-                    />
-                    <ActionButton
-                      icon={<Trash2 color={colors.rose} size={16} />}
-                      label="Remove range"
-                      onPress={async () => {
-                        await deleteRoutineSchedule(schedule.id);
-                        setMessage(await syncedMessage('Date range removed.'));
-                        await load();
-                        setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                      }}
-                    />
-                  </View>
-                ))}
-                {showNewDateRange ? (
+                {editRoutine.id === 'routine_rosh_chodesh' ? (
                   <View style={styles.scheduleEditor}>
-                    <Text style={styles.panelTitle}>New specific date range</Text>
-                    <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} showDateFields />
-                    <View style={styles.actions}>
-                      <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add range" onPress={addScheduleRange} />
-                      <ActionButton icon={<X color={colors.ink} size={16} />} label="Cancel" onPress={() => setShowNewDateRange(false)} />
-                    </View>
+                    <Text style={styles.scheduleHint}>{nextRoshChodeshText(editRoutine.schedules)}</Text>
+                    <Text style={styles.helperText}>Rosh Chodesh dates are handled automatically, so the full date list stays hidden.</Text>
                   </View>
                 ) : (
-                  <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add specific date range" onPress={() => setShowNewDateRange(true)} />
+                  <>
+                    {editRoutine.schedules.map((schedule) => (
+                      <View key={schedule.id} style={styles.scheduleEditor}>
+                        <Text style={styles.scheduleHint}>{formatRange(schedule.startDate, schedule.endDate)}</Text>
+                        <DayChips days={schedule.daysOfWeek} onToggle={(day) => toggleDay(schedule.id, schedule.daysOfWeek, day)} />
+                        {editingScheduleDates[schedule.id] ? (
+                          <View style={styles.datePair}>
+                            <TextInput
+                              defaultValue={schedule.startDate ?? ''}
+                              onEndEditing={async (event) => {
+                                await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
+                                setMessage(await syncedMessage('Date range updated.'));
+                                await load();
+                                setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                              }}
+                              placeholder="Start date YYYY-MM-DD"
+                              placeholderTextColor={colors.muted}
+                              style={styles.scheduleInput}
+                            />
+                            <TextInput
+                              defaultValue={schedule.endDate ?? ''}
+                              onEndEditing={async (event) => {
+                                await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
+                                setMessage(await syncedMessage('Date range updated.'));
+                                await load();
+                                setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                              }}
+                              placeholder="End date YYYY-MM-DD"
+                              placeholderTextColor={colors.muted}
+                              style={styles.scheduleInput}
+                            />
+                          </View>
+                        ) : null}
+                        <ActionButton
+                          icon={editingScheduleDates[schedule.id] ? <X color={colors.ink} size={16} /> : <CirclePlus color={colors.blue} size={16} />}
+                          label={editingScheduleDates[schedule.id] ? 'Done with dates' : schedule.startDate || schedule.endDate ? 'Edit specific range' : 'Choose specific range'}
+                          onPress={() => setEditingScheduleDates((current) => ({ ...current, [schedule.id]: !current[schedule.id] }))}
+                        />
+                        <ActionButton
+                          icon={<Trash2 color={colors.rose} size={16} />}
+                          label="Remove range"
+                          onPress={async () => {
+                            await deleteRoutineSchedule(schedule.id);
+                            setMessage(await syncedMessage('Date range removed.'));
+                            await load();
+                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                          }}
+                        />
+                      </View>
+                    ))}
+                    {showNewDateRange ? (
+                      <View style={styles.scheduleEditor}>
+                        <Text style={styles.panelTitle}>New specific date range</Text>
+                        <ScheduleForm schedule={newSchedule} setSchedule={setNewSchedule} onToggleDay={toggleNewScheduleDay} showDateFields />
+                        <View style={styles.actions}>
+                          <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add range" onPress={addScheduleRange} />
+                          <ActionButton icon={<X color={colors.ink} size={16} />} label="Cancel" onPress={() => setShowNewDateRange(false)} />
+                        </View>
+                      </View>
+                    ) : (
+                      <ActionButton icon={<CirclePlus color={colors.blue} size={16} />} label="Add specific date range" onPress={() => setShowNewDateRange(true)} />
+                    )}
+                  </>
                 )}
                 <Text style={styles.helperText}>If a routine stops applying for a while, you can always mark the routine inactive and turn it back on later.</Text>
               </View>
@@ -424,7 +433,7 @@ function RoutineCard({
         </Pressable>
       </View>
       {routine.description ? <Text style={styles.description}>{routine.description}</Text> : null}
-      <ScheduleSummary schedules={routine.schedules} />
+      <ScheduleSummary routineId={routine.id} schedules={routine.schedules} />
       {open ? (
         <View style={styles.practicePanel}>
           <Text style={styles.panelTitle}>Practices in this routine</Text>
@@ -471,8 +480,15 @@ function ScheduleForm({
   );
 }
 
-function ScheduleSummary({ schedules }: { schedules: RoutineRow['schedules'] }) {
+function ScheduleSummary({ routineId, schedules }: { routineId: string; schedules: RoutineRow['schedules'] }) {
   if (!schedules.length) return <Text style={styles.emptyText}>No dates set.</Text>;
+  if (routineId === 'routine_rosh_chodesh') {
+    return (
+      <View style={styles.scheduleSummary}>
+        <Text style={styles.scheduleLine}>{nextRoshChodeshText(schedules)}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.scheduleSummary}>
       {schedules.map((schedule) => (
@@ -482,6 +498,20 @@ function ScheduleSummary({ schedules }: { schedules: RoutineRow['schedules'] }) 
       ))}
     </View>
   );
+}
+
+function nextRoshChodeshText(schedules: RoutineRow['schedules']) {
+  const nextDate = schedules
+    .map((schedule) => schedule.startDate)
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => value >= todayIsoDate())
+    .sort()[0];
+  return nextDate ? `Next Rosh Chodesh: ${formatMonthDayYear(nextDate)}` : 'Rosh Chodesh schedule is active automatically.';
+}
+
+function formatMonthDayYear(date: string) {
+  const [year] = date.split('-');
+  return `${monthDay(date)}, ${year}`;
 }
 
 function PracticeRow({ task }: { task: RoutineTask }) {
