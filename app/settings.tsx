@@ -384,9 +384,9 @@ function TutorialSection() {
   const [open, setOpen] = useState(false);
   const tutorialCards = [
     {
-      title: 'Welcome to Cheshbon',
+      title: 'Welcome to Daily Cheshbon',
       text:
-        'Cheshbon is a personal reflection app for reviewing your day with honesty, structure, and purpose. The word comes from cheshbon hanefesh, an accounting of the soul: a steady look at choices, habits, priorities, growth, and areas that need attention.',
+        'Daily Cheshbon is a personal reflection app for reviewing your day with honesty, structure, and purpose. The phrase cheshbon hanefesh means an accounting of the soul: a steady look at choices, habits, priorities, growth, and areas that need attention.',
     },
     {
       title: 'The basic idea',
@@ -461,7 +461,7 @@ function TutorialSection() {
     {
       title: 'Account and cloud',
       text:
-        'Use Account in Settings to sign in. Your data can sync through the cloud so the same cheshbon is available on your phone and computer. After signing in, the app pulls cloud data and saves future changes automatically.',
+        'Use Account in Settings to sign in. Your data can sync through the cloud so Daily Cheshbon is available on your phone and computer. After signing in, the app pulls cloud data and saves future changes automatically.',
     },
     {
       title: 'A good starting setup',

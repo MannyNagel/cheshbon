@@ -1,7 +1,7 @@
 import { CalendarDays, CheckCircle2, Save, SkipBack, SkipForward } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ReviewSection } from '@/src/components/ReviewSection';
 import { colors, spacing } from '@/src/components/ui';
@@ -109,8 +109,21 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Nightly review</Text>
-        <Text style={styles.title}>Cheshbon Hanefesh</Text>
+        <View style={styles.brandRow}>
+          <Image
+            accessibilityIgnoresInvertColors
+            accessible
+            accessibilityLabel="Daily Cheshbon logo"
+            resizeMode="contain"
+            source={require('@/assets/daily-cheshbon-logo.png')}
+            style={styles.logoMark}
+          />
+          <View style={styles.brandText}>
+            <Text style={styles.eyebrow}>Nightly review</Text>
+            <Text style={styles.title}>Daily Cheshbon</Text>
+            <Text style={styles.tagline}>A nightly cheshbon hanefesh for intentional growth.</Text>
+          </View>
+        </View>
         <Text style={styles.subtitle}>
           {dayName(reviewDate)} | {monthDay(reviewDate)}
         </Text>
@@ -281,11 +294,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase',
   },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  brandText: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
+  logoMark: {
+    borderRadius: 8,
+    height: 64,
+    width: 64,
+  },
   title: {
     color: colors.ink,
     fontSize: 34,
     fontWeight: '900',
     letterSpacing: 0,
+  },
+  tagline: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   subtitle: {
     color: colors.muted,

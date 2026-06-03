@@ -1,7 +1,7 @@
 import { Bell, CalendarDays, Flame, LogIn, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import { getHomeSummary, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
@@ -95,7 +95,7 @@ export default function HomeScreen() {
         <View style={styles.accountPrompt}>
           <View style={styles.accountPromptText}>
             <Text style={styles.accountPromptTitle}>Sign in to your account</Text>
-            <Text style={styles.accountPromptCopy}>Keep your cheshbon available on your phone and computer.</Text>
+            <Text style={styles.accountPromptCopy}>Keep Daily Cheshbon available on your phone and computer.</Text>
           </View>
           <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.accountButton}>
             <LogIn color="#FFFFFF" size={17} />
@@ -105,7 +105,20 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={styles.header}>
-        <Text style={styles.title}>{'Cheshbon Hanefesh'}</Text>
+        <View style={styles.brandRow}>
+          <Image
+            accessibilityIgnoresInvertColors
+            accessible
+            accessibilityLabel="Daily Cheshbon logo"
+            resizeMode="contain"
+            source={require('@/assets/daily-cheshbon-logo.png')}
+            style={styles.logoMark}
+          />
+          <View style={styles.brandText}>
+            <Text style={styles.title}>Daily Cheshbon</Text>
+            <Text style={styles.tagline}>A nightly cheshbon hanefesh for intentional growth.</Text>
+          </View>
+        </View>
         <Text style={styles.eyebrow}>{dayName(today)}</Text>
         <Text style={styles.hebrewDate}>{formatEnglishDate(today)} | {formatHebrewDate(today)}</Text>
       </View>
@@ -115,7 +128,7 @@ export default function HomeScreen() {
           <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review Complete' : 'Nightly Review'}</Text>
           <Text style={styles.panelCopy}>
             {summary.reviewComplete
-              ? 'Your cheshbon is complete for today. You can still edit it if something important comes back to mind.'
+              ? 'Your Daily Cheshbon is complete for today. You can still edit it if something important comes back to mind.'
               : summary.reviewStarted
                 ? 'Progress is saved. Continue when you are ready, then mark it complete.'
                 : 'Reviewing your day cultivates real time awareness and helps you stay mindful.'}
@@ -446,6 +459,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingTop: spacing.md,
   },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  brandText: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 0,
+  },
   hebrewDate: {
     color: colors.muted,
     fontSize: 17,
@@ -618,9 +641,21 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '900',
-    lineHeight: 42,
+    lineHeight: 38,
+    textAlign: 'left',
+  },
+  logoMark: {
+    borderRadius: 8,
+    height: 76,
+    width: 76,
+  },
+  tagline: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
     textAlign: 'left',
   },
 });

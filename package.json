@@ -1,5 +1,5 @@
 {
-  "name": "cheshbon-hanefesh-expo",
+  "name": "daily-cheshbon-expo",
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
