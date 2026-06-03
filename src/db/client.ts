@@ -42,6 +42,7 @@ export async function initializeDatabase() {
     await seedDatabase(db);
   }
   await ensureRoshChodeshRoutine(db);
+  await ensureReflectionDefaults(db);
   await normalizeQualityScale(db);
   await normalizeReviewCompletionState(db);
 }
@@ -171,17 +172,16 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
 
 export async function ensureRoshChodeshRoutine(db?: SQLite.SQLiteDatabase) {
   const targetDb = db ?? (await getDb());
-  const currentAvodahDomain = domains.find(([id]) => id === 'domain_current_avodah');
   const overviewSection = reviewSections.find(([id]) => id === 'section_overall');
   const roshChodeshRoutine = routines.find(([id]) => id === 'routine_rosh_chodesh');
   const roshChodeshPracticeIds = new Set(['practice_rosh_chodesh_past_month', 'practice_rosh_chodesh_improvement']);
   const roshChodeshPractices = practices.filter((practice) => roshChodeshPracticeIds.has(practice.id));
+  const roshChodeshDomainIds = new Set(roshChodeshPractices.map((practice) => practice.domainId));
   const roshChodeshRoutinePractices = routinePractices.filter(([, routineId]) => routineId === 'routine_rosh_chodesh');
   const roshChodeshSchedules = schedules.filter(([, routineId]) => routineId === 'routine_rosh_chodesh');
 
   await targetDb.withTransactionAsync(async () => {
-    if (currentAvodahDomain) {
-      const [id, name, description] = currentAvodahDomain;
+    for (const [id, name, description] of domains.filter(([domainId]) => roshChodeshDomainIds.has(domainId))) {
       await targetDb.runAsync(
         'INSERT OR IGNORE INTO domains (id, user_id, name, description, sort_order) VALUES (?, ?, ?, ?, ?)',
         id,
@@ -290,6 +290,139 @@ export async function ensureRoshChodeshRoutine(db?: SQLite.SQLiteDatabase) {
   });
 }
 
+export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
+  const targetDb = db ?? (await getDb());
+  const reflectionDomain = domains.find(([id]) => id === 'domain_reflection');
+  const reflectionPracticeIds = new Set([
+    'practice_daily_thoughts',
+    'practice_weekly_reflection',
+    'practice_rosh_chodesh_past_month',
+  ]);
+  const reflectionPractices = practices.filter((practice) => reflectionPracticeIds.has(practice.id));
+  const reflectionRoutinePracticeIds = new Set([
+    'rp_daily_thoughts',
+    'rp_weekly_reflection',
+    'rp_rosh_chodesh_past_month',
+  ]);
+  const reflectionRoutinePractices = routinePractices.filter(([id]) => reflectionRoutinePracticeIds.has(id));
+
+  await targetDb.withTransactionAsync(async () => {
+    if (reflectionDomain) {
+      const [id, name, description] = reflectionDomain;
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO domains (id, user_id, name, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+        id,
+        LOCAL_USER_ID,
+        name,
+        description,
+        domains.findIndex(([domainId]) => domainId === id) + 1,
+      );
+      await targetDb.runAsync(
+        'UPDATE domains SET name = ?, description = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        name,
+        description,
+        id,
+      );
+    }
+
+    for (const practice of reflectionPractices) {
+      await targetDb.runAsync(
+        'INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, 0)',
+        practice.id,
+        LOCAL_USER_ID,
+        practice.domainId,
+        practice.name,
+        practice.description ?? null,
+      );
+      await targetDb.runAsync(
+        'UPDATE practices SET domain_id = ?, name = ?, description = ?, allow_note = 0, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        practice.domainId,
+        practice.name,
+        practice.description ?? null,
+        practice.id,
+      );
+
+      for (const [index, metric] of practice.metrics.entries()) {
+        await targetDb.runAsync(
+          `INSERT OR IGNORE INTO metrics
+            (id, practice_id, name, metric_type, scale_min, scale_max, required, help_text, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          metric.id,
+          practice.id,
+          metric.name,
+          metric.metricType,
+          metric.scaleMin ?? null,
+          metric.scaleMax ?? null,
+          metric.required ? 1 : 0,
+          metric.helpText ?? null,
+          index + 1,
+        );
+        await targetDb.runAsync(
+          'UPDATE metrics SET name = ?, metric_type = ?, scale_min = ?, scale_max = ?, required = ?, help_text = ?, sort_order = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          metric.name,
+          metric.metricType,
+          metric.scaleMin ?? null,
+          metric.scaleMax ?? null,
+          metric.required ? 1 : 0,
+          metric.helpText ?? null,
+          index + 1,
+          metric.id,
+        );
+      }
+
+      await targetDb.runAsync(
+        `INSERT OR IGNORE INTO practice_blockers (practice_id, blocker_id, enabled)
+         SELECT ?, id, 0
+         FROM blockers
+         WHERE active = 1`,
+        practice.id,
+      );
+      await targetDb.runAsync(
+        `UPDATE practice_blockers
+         SET enabled = 0,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE practice_id = ?`,
+        practice.id,
+      );
+    }
+
+    for (const [id, routineId, practiceId, sectionId, sortOrder, required, displayName, helpText] of reflectionRoutinePractices) {
+      await targetDb.runAsync(
+        `INSERT OR IGNORE INTO routine_practices
+          (id, routine_template_id, practice_id, review_section_id, sort_order, required, display_name_override, help_text_override)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        routineId,
+        practiceId,
+        sectionId,
+        sortOrder,
+        required,
+        displayName,
+        helpText,
+      );
+      await targetDb.runAsync(
+        `UPDATE routine_practices
+         SET routine_template_id = ?,
+          review_section_id = ?,
+          sort_order = ?,
+          required = ?,
+          enabled = 1,
+          display_name_override = ?,
+          help_text_override = ?,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        routineId,
+        sectionId,
+        sortOrder,
+        required,
+        displayName,
+        helpText,
+        id,
+      );
+    }
+  });
+}
+
 export async function resetDatabaseToSeedDefaults() {
   const db = await getDb();
   await db.execAsync(schemaSql);
@@ -304,6 +437,7 @@ export async function resetDatabaseToSeedDefaults() {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
   await seedDatabase(db);
+  await ensureReflectionDefaults(db);
   await normalizeQualityScale(db);
   await normalizeReviewCompletionState(db);
 }

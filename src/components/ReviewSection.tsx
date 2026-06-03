@@ -46,7 +46,8 @@ function groupOverviewItems(items: NightlySection['items']) {
     { title: 'Spiritual', rank: 2, items: [] as NightlySection['items'] },
     { title: 'Middos', rank: 3, items: [] as NightlySection['items'] },
     { title: 'Current Avodah', rank: 4, items: [] as NightlySection['items'] },
-    { title: 'Other', rank: 5, items: [] as NightlySection['items'] },
+    { title: 'Reflection', rank: 5, items: [] as NightlySection['items'] },
+    { title: 'Other', rank: 6, items: [] as NightlySection['items'] },
   ];
   for (const item of items) {
     groups[overviewGroupIndex(item.domainId, item.practiceName)].items.push(item);
@@ -65,7 +66,8 @@ function overviewGroupIndex(domainId: string, practiceName: string) {
   if (domainId === 'domain_tefillah_brachot') return 1;
   if (domainId === 'domain_middos') return 2;
   if (domainId === 'domain_current_avodah') return 3;
-  return 4;
+  if (domainId === 'domain_reflection') return 4;
+  return 5;
 }
 
 function overviewItemRank(item: NightlySection['items'][number]) {
@@ -77,6 +79,9 @@ function overviewItemRank(item: NightlySection['items'][number]) {
   if (name.includes('complimentary')) return 220;
   if (name.includes('gratitude')) return 230;
   if (name.includes('avodah')) return 310;
+  if (name.includes('daily reflection')) return 410;
+  if (name.includes('weekly reflection')) return 420;
+  if (name.includes('monthly reflection')) return 430;
   return item.sortOrder;
 }
 

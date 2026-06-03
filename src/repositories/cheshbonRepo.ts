@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
-import { ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
+import { ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
 import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 import type {
@@ -1285,6 +1285,7 @@ export async function importAllData(exportJson: string) {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
   await ensureRoshChodeshRoutine(db);
+  await ensureReflectionDefaults(db);
 }
 
 export async function shareExportJson() {

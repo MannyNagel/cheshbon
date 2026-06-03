@@ -406,7 +406,7 @@ function TutorialSection() {
     {
       title: 'Metrics',
       text:
-        'The metric decides how you answer a practice. Completed is yes or no. Quality is a 1 to 5 rating. Number tracks a count. Text is for written answers like gratitude, daily avodah, or thoughts and reflections.',
+        'The metric decides how you answer a practice. Completed is yes or no. Quality is a 1 to 5 rating. Number tracks a count. Text is for written answers like gratitude, daily avodah, or daily reflection.',
     },
     {
       title: 'Review sections',

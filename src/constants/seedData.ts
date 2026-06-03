@@ -10,6 +10,7 @@ export const domains = [
   ['domain_family', 'Marriage / Family', 'Home, family, and close relationships'],
   ['domain_foundations', 'Morning & Night Foundations', 'Anchors at the edges of the day'],
   ['domain_current_avodah', 'Current Avodah', 'The present point of growth for today and this week'],
+  ['domain_reflection', 'Reflection', 'Daily, weekly, and monthly spiritual reflection'],
   ['domain_other', 'Other', 'General thoughts, reflections, and uncategorized practices'],
   ['domain_seasonal', 'Seasonal Avodah', 'Avodah that changes by calendar and context'],
 ] as const;
@@ -21,7 +22,7 @@ export const reviewSections = [
 ] as const;
 export const routines = [
   ['routine_core', 'Weekly Core', 'The stable core for regular review days', 'core', 0, true],
-  ['routine_shabbos', 'Shabbos', 'Shabbos review overlay', 'shabbos', 20, true],
+  ['routine_shabbos', 'Shabbos', 'Shabbos day review and weekly reflection', 'shabbos', 20, true],
   ['routine_vacation', 'Vacation', 'A lighter structure for vacation or travel periods', 'travel', 30, false],
   ['routine_work', 'Work', 'Regular weekday work structure', 'custom', 40, true],
   ['routine_rosh_chodesh', 'Rosh Chodesh', 'Monthly reflection for Rosh Chodesh', 'seasonal', 50, true],
@@ -320,29 +321,29 @@ export const practices: PracticeSeed[] = [
   },
   {
     id: 'practice_rosh_chodesh_past_month',
-    domainId: 'domain_current_avodah',
-    name: 'Past month avodas Hashem',
-    description: 'How was your avodas Hashem this past month?',
+    domainId: 'domain_reflection',
+    name: 'Monthly Reflection',
+    description: 'How was your Avodas Hashem this past month?',
     metrics: [
       {
         id: 'metric_rosh_chodesh_past_month_text',
-        name: 'Past month',
+        name: 'Monthly reflection',
         metricType: 'text',
-        helpText: 'How was your avodas Hashem this past month?',
+        helpText: 'How was your Avodas Hashem this past month?',
       },
     ],
   },
   {
     id: 'practice_rosh_chodesh_improvement',
     domainId: 'domain_current_avodah',
-    name: 'Rosh Chodesh improvement',
-    description: 'Where can you improve and how?',
+    name: 'Rosh Chodesh Avodah',
+    description: 'Where can you improve this month and how? Be specific.',
     metrics: [
       {
         id: 'metric_rosh_chodesh_improvement_text',
         name: 'Improvement',
         metricType: 'text',
-        helpText: 'Where can you improve and how?',
+        helpText: 'Where can you improve this month and how? Be specific.',
       },
     ],
   },
@@ -357,11 +358,20 @@ export const practices: PracticeSeed[] = [
   },
   {
     id: 'practice_daily_thoughts',
-    domainId: 'domain_other',
-    name: 'Thoughts and Reflections',
-    description: 'Anything from the day that feels worth remembering or thinking through.',
+    domainId: 'domain_reflection',
+    name: 'Daily Reflection',
+    description: 'An open-ended spiritual reflection on the day.',
     metrics: [
-      { id: 'metric_daily_thoughts_text', name: 'Thoughts and reflections', metricType: 'text' },
+      { id: 'metric_daily_thoughts_text', name: 'Daily reflection', metricType: 'text' },
+    ],
+  },
+  {
+    id: 'practice_weekly_reflection',
+    domainId: 'domain_reflection',
+    name: 'Weekly Reflection',
+    description: 'An open-ended spiritual reflection on the past week.',
+    metrics: [
+      { id: 'metric_weekly_reflection_text', name: 'Weekly reflection', metricType: 'text' },
     ],
   },
   {
@@ -428,6 +438,7 @@ export const routinePractices = [
   ['rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0, null, null],
   ['rp_daily_thoughts', 'routine_core', 'practice_daily_thoughts', 'section_overall', 320, 0, null, null],
   ['rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0, null, null],
+  ['rp_weekly_reflection', 'routine_shabbos', 'practice_weekly_reflection', 'section_overall', 320, 0, null, null],
   [
     'rp_rosh_chodesh_past_month',
     'routine_rosh_chodesh',
@@ -436,7 +447,7 @@ export const routinePractices = [
     10,
     0,
     null,
-    'How was your avodas Hashem this past month?',
+    'How was your Avodas Hashem this past month?',
   ],
   [
     'rp_rosh_chodesh_improvement',
