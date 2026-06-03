@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, CirclePlus, Pencil, Save, Search, Trash2, X } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, ChevronDown, CirclePlus, Pencil, Save, Search, SlidersHorizontal, Trash2, X } from 'lucide-react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -32,6 +32,7 @@ type TaskRow = {
   domainName: string;
   allowNote: number;
   markable: number;
+  weeklyTarget: number | null;
   routineId: string;
   routineName: string;
   reviewSectionId: string;
@@ -64,6 +65,8 @@ const emptyForm = {
   enabled: true,
   allowNote: true,
   markable: false,
+  weeklyGoalEnabled: false,
+  weeklyTarget: '',
   blockersEnabled: true,
   blockerIds: [] as string[],
 };
@@ -124,9 +127,11 @@ export default function PracticesScreen() {
         domainId: options.domains[0]?.id ?? '',
         routineId: params.routineId ?? options.routines[0]?.id ?? '',
         reviewSectionId: options.reviewSections[0]?.id ?? '',
-        blockersEnabled: true,
-        blockerIds: options.blockers.map((blocker) => blocker.id),
-      });
+      blockersEnabled: true,
+      blockerIds: options.blockers.map((blocker) => blocker.id),
+      weeklyGoalEnabled: false,
+      weeklyTarget: '',
+    });
       setMode('add');
       setMessage(null);
     }
@@ -186,6 +191,8 @@ export default function PracticesScreen() {
       reviewSectionId: options?.reviewSections[0]?.id ?? '',
       blockersEnabled: true,
       blockerIds: options?.blockers.map((blocker) => blocker.id) ?? [],
+      weeklyGoalEnabled: false,
+      weeklyTarget: '',
     });
     setMode('add');
     setMessage(null);
@@ -203,6 +210,8 @@ export default function PracticesScreen() {
       enabled: task.enabled === 1,
       allowNote: task.allowNote === 1,
       markable: task.markable === 1,
+      weeklyGoalEnabled: task.weeklyTarget != null && task.weeklyTarget > 0,
+      weeklyTarget: task.weeklyTarget == null ? '' : String(task.weeklyTarget),
       blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
       blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
     });
@@ -224,10 +233,11 @@ export default function PracticesScreen() {
           practiceId: editing.practiceId,
           metricId: editing.metricId,
           ...form,
+          weeklyTarget: weeklyTargetFromForm(form),
         });
         setMessage(await syncedMessage('Practice updated.'));
       } else {
-        await createTask(form);
+        await createTask({ ...form, weeklyTarget: weeklyTargetFromForm(form) });
         setMessage(await syncedMessage('Practice added.'));
       }
       router.replace('/practices');
@@ -381,6 +391,7 @@ export default function PracticesScreen() {
                     </Text>
                     <Text style={styles.taskMeta}>
                       {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} | {task.enabled ? 'active' : 'hidden'}
+                      {task.weeklyTarget ? ` | weekly goal ${task.weeklyTarget}x` : ''}
                     </Text>
                   </View>
                   {reorderMode && sortBy === 'section' ? (
@@ -462,6 +473,8 @@ function TaskForm({
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
 }) {
   const domainChoices = useMemo(() => options.domains, [options.domains]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const weeklyGoalAvailable = form.metricKind === 'completed';
   return (
     <View style={styles.form}>
       <Field label="Practice name">
@@ -486,7 +499,14 @@ function TaskForm({
         <ChoiceGrid
           choices={metricOptions}
           selectedId={form.metricKind}
-          onSelect={(metricKind) => setForm((current) => ({ ...current, metricKind: metricKind as MetricKind }))}
+          onSelect={(metricKind) =>
+            setForm((current) => ({
+              ...current,
+              metricKind: metricKind as MetricKind,
+              weeklyGoalEnabled: metricKind === 'completed' ? current.weeklyGoalEnabled : false,
+              weeklyTarget: metricKind === 'completed' ? current.weeklyTarget : '',
+            }))
+          }
         />
       </Field>
       <Field label="Routine">
@@ -534,6 +554,60 @@ function TaskForm({
           <Toggle label={form.markable ? 'Can remember' : 'No reminder'} selected={form.markable} onPress={() => setForm((current) => ({ ...current, markable: !current.markable }))} />
         </View>
       ) : null}
+      <View style={styles.advancedPanel}>
+        <Pressable accessibilityRole="button" onPress={() => setAdvancedOpen((value) => !value)} style={styles.advancedHeader}>
+          <View style={styles.advancedTitleRow}>
+            <SlidersHorizontal color={colors.ink} size={17} />
+            <Text style={styles.advancedTitle}>Advanced settings</Text>
+          </View>
+          <ChevronDown color={colors.muted} size={18} style={advancedOpen ? styles.chevronOpen : undefined} />
+        </Pressable>
+        {advancedOpen ? (
+          <View style={styles.advancedBody}>
+            <View style={styles.weeklyGoalHeader}>
+              <View style={styles.weeklyGoalText}>
+                <Text style={styles.weeklyGoalTitle}>Weekly goal</Text>
+                <Text style={styles.weeklyGoalCopy}>
+                  Track a practice you hope to complete a set number of times each week. Weeks start on Shabbos.
+                </Text>
+              </View>
+              <Toggle
+                label={form.weeklyGoalEnabled ? 'On' : 'Off'}
+                selected={form.weeklyGoalEnabled}
+                onPress={() =>
+                  setForm((current) => ({
+                    ...current,
+                    weeklyGoalEnabled: weeklyGoalAvailable ? !current.weeklyGoalEnabled : false,
+                    weeklyTarget: weeklyGoalAvailable && !current.weeklyGoalEnabled ? current.weeklyTarget || '3' : current.weeklyTarget,
+                  }))
+                }
+              />
+            </View>
+            {!weeklyGoalAvailable ? (
+              <Text style={styles.advancedHelp}>Weekly goals are available for Completed yes/no practices.</Text>
+            ) : null}
+            {weeklyGoalAvailable && form.weeklyGoalEnabled ? (
+              <View style={styles.weeklyTargetRow}>
+                <Text style={styles.weeklyTargetLabel}>Times per week</Text>
+                <TextInput
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  onChangeText={(weeklyTarget) =>
+                    setForm((current) => ({
+                      ...current,
+                      weeklyTarget: weeklyTarget.replace(/[^1-7]/g, '').slice(0, 1),
+                    }))
+                  }
+                  placeholder="3"
+                  placeholderTextColor={colors.muted}
+                  style={styles.weeklyTargetInput}
+                  value={form.weeklyTarget}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -610,6 +684,13 @@ function metricTypeToKind(metricType: string | null): MetricKind {
   if (metricType === 'number') return 'number';
   if (metricType === 'text') return 'text';
   return 'quality';
+}
+
+function weeklyTargetFromForm(form: typeof emptyForm) {
+  if (form.metricKind !== 'completed' || !form.weeklyGoalEnabled) return null;
+  const target = Number(form.weeklyTarget);
+  if (!Number.isFinite(target) || target < 1) return null;
+  return Math.min(7, Math.round(target));
 }
 
 function sectionRank(name: string) {
@@ -696,6 +777,61 @@ const styles = StyleSheet.create({
   fieldStack: { alignItems: 'flex-start', gap: spacing.sm },
   label: { color: colors.ink, fontSize: 14, fontWeight: '900' },
   input: { borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 15, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, textAlign: 'left', writingDirection: 'ltr' },
+  advancedPanel: {
+    backgroundColor: colors.paper,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  advancedHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  },
+  advancedTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  advancedTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  advancedBody: {
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  advancedHelp: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  chevronOpen: { transform: [{ rotate: '180deg' }] },
+  weeklyGoalHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+  },
+  weeklyGoalText: { flex: 1, gap: spacing.xs },
+  weeklyGoalTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  weeklyGoalCopy: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  weeklyTargetRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+  },
+  weeklyTargetLabel: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  weeklyTargetInput: {
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '800',
+    height: 44,
+    textAlign: 'center',
+    width: 64,
+  },
   searchInput: { color: colors.ink, flex: 1, fontSize: 15, minHeight: 42, textAlign: 'left', writingDirection: 'ltr' },
   searchRow: {
     alignItems: 'center',

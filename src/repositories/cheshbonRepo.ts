@@ -751,6 +751,7 @@ export async function getTasksForManagement() {
     domainName: string;
     allowNote: number;
     markable: number;
+    weeklyTarget: number | null;
     routineId: string;
     routineName: string;
     reviewSectionId: string;
@@ -767,6 +768,7 @@ export async function getTasksForManagement() {
       p.description,
       p.allow_note as allowNote,
       p.markable,
+      p.weekly_target as weeklyTarget,
       d.id as domainId,
       d.name as domainName,
       rt.id as routineId,
@@ -876,6 +878,7 @@ export async function updateTask(input: {
   enabled: boolean;
   allowNote: boolean;
   markable: boolean;
+  weeklyTarget?: number | null;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -899,12 +902,13 @@ export async function updateTask(input: {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, weekly_target = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       input.name.trim(),
       input.description?.trim() || null,
       input.domainId,
       input.allowNote ? 1 : 0,
       input.markable ? 1 : 0,
+      normalizeWeeklyTarget(input.weeklyTarget),
       input.practiceId,
     );
     await db.runAsync(
@@ -963,6 +967,7 @@ export async function createTask(input: {
   enabled?: boolean;
   allowNote: boolean;
   markable: boolean;
+  weeklyTarget?: number | null;
   blockerIds?: string[];
 }) {
   const db = await getDb();
@@ -981,7 +986,7 @@ export async function createTask(input: {
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note, markable) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note, markable, weekly_target) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       practiceId,
       LOCAL_USER_ID,
       input.domainId,
@@ -989,6 +994,7 @@ export async function createTask(input: {
       input.description?.trim() || null,
       input.allowNote ? 1 : 0,
       input.markable ? 1 : 0,
+      normalizeWeeklyTarget(input.weeklyTarget),
     );
     await db.runAsync(
       `INSERT INTO metrics (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order)
@@ -1034,6 +1040,14 @@ export async function removeTaskFromTodayForward(routinePracticeId: string, from
     fromDate,
     routinePracticeId,
   );
+}
+
+function normalizeWeeklyTarget(value: number | null | undefined) {
+  if (value == null) return null;
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < 1) return null;
+  return Math.min(7, rounded);
 }
 
 export async function moveTaskWithinReviewSection(routinePracticeId: string, direction: 'up' | 'down') {

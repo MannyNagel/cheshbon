@@ -82,6 +82,10 @@ export type NightlyReviewItem = {
   allowedBlockerIds?: string[] | null;
   allowNote: boolean;
   markable: boolean;
+  weeklyGoal?: {
+    target: number;
+    completedBeforeToday: number;
+  } | null;
 };
 
 export type NightlyReviewSection = ReviewSection & {

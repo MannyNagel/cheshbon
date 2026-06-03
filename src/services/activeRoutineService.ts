@@ -1,4 +1,5 @@
 import { getDb } from '@/src/db/client';
+import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import type { NightlyReviewItem, NightlyReviewSection, RoutineTemplate } from '@/src/models/types';
 import { getMetricsForPracticeIds, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
 import { addDaysIso, dayOfWeek } from '@/src/utils/dates';
@@ -35,6 +36,7 @@ type ReviewItemRow = {
   practice_description: string | null;
   allow_note: number;
   markable: number;
+  weekly_target: number | null;
   display_name_override: string | null;
   help_text_override: string | null;
   domain_id: string;
@@ -103,6 +105,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       p.description as practice_description,
       p.allow_note,
       p.markable,
+      p.weekly_target,
       rp.display_name_override,
       rp.help_text_override,
       d.id as domain_id,
@@ -137,6 +140,10 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
 
   const winners = [...winningItems.values()];
   const metricsByPractice = await getMetricsForPracticeIds(winners.map((item) => item.practice_id));
+  const weeklyGoalProgress = await getWeeklyGoalProgress(
+    reviewDate,
+    winners.filter((item) => item.weekly_target != null && item.weekly_target > 0).map((item) => item.practice_id),
+  );
   const blockerRows = winners.length
     ? await db.getAllAsync<{ practice_id: string; blocker_id: string; enabled: number }>(
         `SELECT practice_id, blocker_id, enabled
@@ -185,12 +192,52 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       allowedBlockerIds: customizedBlockerPractices.has(row.practice_id) ? blockersByPractice.get(row.practice_id) ?? [] : null,
       allowNote: row.allow_note === 1,
       markable: reminderPreferences.taskRemindersEnabled && row.markable === 1,
+      weeklyGoal:
+        row.weekly_target != null && row.weekly_target > 0 && (metricsByPractice.get(row.practice_id) ?? []).some((metric) => metric.metricType === 'boolean')
+          ? {
+              target: row.weekly_target,
+              completedBeforeToday: weeklyGoalProgress.get(row.practice_id) ?? 0,
+            }
+          : null,
     };
     section.items.push(item);
     sectionMap.set(row.review_section_id, section);
   }
 
   return [...sectionMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+async function getWeeklyGoalProgress(reviewDate: string, practiceIds: string[]) {
+  const progress = new Map<string, number>();
+  if (practiceIds.length === 0) return progress;
+
+  const db = await getDb();
+  const weekStart = halachicWeekStart(reviewDate);
+  const rows = await db.getAllAsync<{ practice_id: string; completed: number }>(
+    `SELECT de.practice_id, COUNT(DISTINCT de.entry_date) as completed
+     FROM daily_entries de
+     JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.value_boolean = 1
+     JOIN metrics m ON m.id = emv.metric_id
+      AND m.practice_id = de.practice_id
+      AND m.metric_type = 'boolean'
+      AND m.active = 1
+     WHERE de.user_id = ?
+      AND de.practice_id IN (${practiceIds.map(() => '?').join(',')})
+      AND de.entry_date >= ?
+      AND de.entry_date < ?
+     GROUP BY de.practice_id`,
+    [LOCAL_USER_ID, ...practiceIds, weekStart, reviewDate],
+  );
+  for (const row of rows) {
+    progress.set(row.practice_id, row.completed);
+  }
+  return progress;
+}
+
+function halachicWeekStart(isoDate: string) {
+  const delta = (dayOfWeek(isoDate) - 6 + 7) % 7;
+  return addDaysIso(isoDate, -delta);
 }
 
 function isFirstRoshChodeshDate(isoDate: string) {

@@ -68,6 +68,10 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
     : blockers;
   const showBlockers = visibleBlockers.length > 0;
   const showNote = item.allowNote;
+  const weeklyGoalMetric = item.weeklyGoal ? item.metrics.find((metric) => metric.metricType === 'boolean') : null;
+  const completedThisReview = weeklyGoalMetric ? entry.metricValues[weeklyGoalMetric.id]?.valueBoolean === true : false;
+  const weeklyGoalCompleted = item.weeklyGoal ? item.weeklyGoal.completedBeforeToday + (completedThisReview ? 1 : 0) : 0;
+  const weeklyGoalRatio = item.weeklyGoal ? Math.min(1, weeklyGoalCompleted / item.weeklyGoal.target) : 0;
 
   return (
     <View style={styles.card}>
@@ -88,6 +92,19 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
         ) : null}
       </View>
       {item.helpText ? <Text style={styles.help}>{item.helpText}</Text> : null}
+      {item.weeklyGoal ? (
+        <View style={styles.weeklyGoal}>
+          <View style={styles.weeklyGoalRow}>
+            <Text style={styles.weeklyGoalLabel}>Weekly goal</Text>
+            <Text style={[styles.weeklyGoalCount, weeklyGoalCompleted >= item.weeklyGoal.target && styles.weeklyGoalMet]}>
+              {weeklyGoalCompleted} of {item.weeklyGoal.target} since Shabbos
+            </Text>
+          </View>
+          <View style={styles.weeklyGoalTrack}>
+            <View style={[styles.weeklyGoalFill, { width: `${weeklyGoalRatio * 100}%` }]} />
+          </View>
+        </View>
+      ) : null}
       <View style={styles.metrics}>
         {visibleMetrics.map((metric) => (
           <MetricInput
@@ -162,6 +179,45 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  weeklyGoal: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  weeklyGoalRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  weeklyGoalLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  weeklyGoalCount: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  weeklyGoalMet: {
+    color: colors.green,
+  },
+  weeklyGoalTrack: {
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    height: 7,
+    overflow: 'hidden',
+  },
+  weeklyGoalFill: {
+    backgroundColor: colors.green,
+    borderRadius: 999,
+    height: 7,
   },
   metrics: {
     gap: spacing.lg,
