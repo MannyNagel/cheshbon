@@ -1055,9 +1055,10 @@ export async function moveTaskWithinReviewSection(routinePracticeId: string, dir
   await db.withTransactionAsync(async () => {
     const current = await db.getFirstAsync<{
       id: string;
+      routine_template_id: string;
       review_section_id: string;
     }>(
-      'SELECT id, review_section_id FROM routine_practices WHERE id = ? AND archived_from IS NULL',
+      'SELECT id, routine_template_id, review_section_id FROM routine_practices WHERE id = ? AND archived_from IS NULL',
       routinePracticeId,
     );
     if (!current) return;
@@ -1065,12 +1066,13 @@ export async function moveTaskWithinReviewSection(routinePracticeId: string, dir
     const rows = await db.getAllAsync<{ id: string }>(
       `SELECT rp.id
        FROM routine_practices rp
-       JOIN routine_templates rt ON rt.id = rp.routine_template_id
        JOIN practices p ON p.id = rp.practice_id
        WHERE rp.review_section_id = ?
+        AND rp.routine_template_id = ?
         AND rp.archived_from IS NULL
-       ORDER BY rp.sort_order, rt.priority, rt.name, p.name`,
+       ORDER BY rp.sort_order, p.name`,
       current.review_section_id,
+      current.routine_template_id,
     );
     const currentIndex = rows.findIndex((row) => row.id === current.id);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;

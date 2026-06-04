@@ -2,6 +2,9 @@ import { resetDatabaseToSeedDefaults } from '@/src/db/client';
 import { exportAllData, importAllData } from '@/src/repositories/cheshbonRepo';
 import { isSupabaseConfigured, supabase } from '@/src/services/supabaseClient';
 
+const productionAppOrigin = 'https://dailycheshbon.com';
+const legacyProductionHosts = new Set(['cheshbon.vercel.app', 'www.cheshbon.vercel.app']);
+
 export type CloudStatus = {
   configured: boolean;
   signedIn: boolean;
@@ -231,6 +234,9 @@ async function requireUser() {
 
 function getAuthRedirectUrl() {
   if (typeof window !== 'undefined' && window.location?.origin) {
+    if (legacyProductionHosts.has(window.location.hostname) || window.location.hostname.endsWith('.vercel.app')) {
+      return `${productionAppOrigin}/settings`;
+    }
     return `${window.location.origin}/settings`;
   }
   return undefined;

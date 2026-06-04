@@ -82,6 +82,7 @@ export default function PracticesScreen() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
+  const [selectedReorderRoutineId, setSelectedReorderRoutineId] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'inactive'>('active');
   const handledAddParamRef = useRef<string | null>(null);
@@ -96,6 +97,7 @@ export default function PracticesScreen() {
       setOptions(nextOptions);
       setReminderPreferences(nextReminderPreferences);
       setTasks(nextTasks);
+      setSelectedReorderRoutineId((current) => current || nextOptions.routines[0]?.id || '');
       setForm((current) => ({
         ...current,
         domainId: current.domainId || nextOptions.domains[0]?.id || '',
@@ -127,11 +129,11 @@ export default function PracticesScreen() {
         domainId: options.domains[0]?.id ?? '',
         routineId: params.routineId ?? options.routines[0]?.id ?? '',
         reviewSectionId: options.reviewSections[0]?.id ?? '',
-      blockersEnabled: true,
-      blockerIds: options.blockers.map((blocker) => blocker.id),
-      weeklyGoalEnabled: false,
-      weeklyTarget: '',
-    });
+        blockersEnabled: true,
+        blockerIds: options.blockers.map((blocker) => blocker.id),
+        weeklyGoalEnabled: false,
+        weeklyTarget: '',
+      });
       setMode('add');
       setMessage(null);
     }
@@ -142,6 +144,7 @@ export default function PracticesScreen() {
   const filteredPractices = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return tasks
+      .filter((task) => (reorderMode && selectedReorderRoutineId ? task.routineId === selectedReorderRoutineId : true))
       .filter((task) => {
         if (statusFilter === 'active') return task.enabled === 1;
         if (statusFilter === 'inactive') return task.enabled !== 1;
@@ -151,21 +154,26 @@ export default function PracticesScreen() {
         if (!normalizedQuery) return true;
         return `${task.name} ${task.domainName} ${task.routineName} ${task.reviewSectionName} ${task.metricName ?? ''}`.toLowerCase().includes(normalizedQuery);
       });
-  }, [query, statusFilter, tasks]);
+  }, [query, reorderMode, selectedReorderRoutineId, statusFilter, tasks]);
   const sortedPractices = useMemo(() => {
     const copy = [...filteredPractices];
+    if (reorderMode) {
+      return copy.sort((a, b) => sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    }
     return copy.sort((a, b) => {
       if (sortBy === 'domain') return a.domainName.localeCompare(b.domainName) || a.name.localeCompare(b.name);
       if (sortBy === 'section') return sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.routineName.localeCompare(b.routineName) || a.name.localeCompare(b.name);
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       return a.routineName.localeCompare(b.routineName) || sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder;
     });
-  }, [filteredPractices, sortBy]);
+  }, [filteredPractices, reorderMode, sortBy]);
   const groupedPractices = useMemo(() => {
     const groups: Array<{ title: string; practices: TaskRow[] }> = [];
     for (const practice of sortedPractices) {
       const title =
-        sortBy === 'domain'
+        reorderMode
+          ? practice.reviewSectionName
+          : sortBy === 'domain'
           ? practice.domainName
           : sortBy === 'section'
             ? practice.reviewSectionName
@@ -180,7 +188,13 @@ export default function PracticesScreen() {
       }
     }
     return groups;
-  }, [sortBy, sortedPractices]);
+  }, [reorderMode, sortBy, sortedPractices]);
+  const reorderRoutineChoices = useMemo(() => {
+    if (!options) return [];
+    const routineIdsWithPractices = new Set(tasks.map((task) => task.routineId));
+    const routinesWithPractices = options.routines.filter((routine) => routineIdsWithPractices.has(routine.id));
+    return routinesWithPractices.length ? routinesWithPractices : options.routines;
+  }, [options, tasks]);
 
   function startAdd() {
     setEditing(null);
@@ -306,7 +320,10 @@ export default function PracticesScreen() {
               onPress={() => {
                 const next = !reorderMode;
                 setReorderMode(next);
-                if (next) setSortBy('section');
+                if (next) {
+                  setSortBy('section');
+                  setSelectedReorderRoutineId((current) => current || reorderRoutineChoices[0]?.id || options?.routines[0]?.id || '');
+                }
               }}
               style={[styles.iconAction, reorderMode && styles.iconActionActive]}
             >
@@ -353,21 +370,35 @@ export default function PracticesScreen() {
                 </Pressable>
               ) : null}
             </View>
-            <Text style={styles.label}>Sort by</Text>
-            <ChoiceGrid
-              choices={[
-                { id: 'routine', label: 'Routine' },
-                { id: 'domain', label: 'Domain' },
-                { id: 'section', label: 'Review Section' },
-                { id: 'name', label: 'Name' },
-              ]}
-              selectedId={sortBy}
-              onSelect={(id) => {
-                const nextSort = id as typeof sortBy;
-                setSortBy(nextSort);
-                if (nextSort !== 'section') setReorderMode(false);
-              }}
-            />
+            {reorderMode ? (
+              <>
+                <Text style={styles.label}>Routine to rearrange</Text>
+                <ChoiceGrid
+                  choices={reorderRoutineChoices}
+                  selectedId={selectedReorderRoutineId}
+                  onSelect={setSelectedReorderRoutineId}
+                />
+                <Text style={styles.filterHelp}>Use the arrows to reorder practices inside this routine. Each review section is ordered separately.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Sort by</Text>
+                <ChoiceGrid
+                  choices={[
+                    { id: 'routine', label: 'Routine' },
+                    { id: 'domain', label: 'Domain' },
+                    { id: 'section', label: 'Review Section' },
+                    { id: 'name', label: 'Name' },
+                  ]}
+                  selectedId={sortBy}
+                  onSelect={(id) => {
+                    const nextSort = id as typeof sortBy;
+                    setSortBy(nextSort);
+                    if (nextSort !== 'section') setReorderMode(false);
+                  }}
+                />
+              </>
+            )}
             <Text style={styles.label}>Show</Text>
             <ChoiceGrid
               choices={[
@@ -394,7 +425,7 @@ export default function PracticesScreen() {
                       {task.weeklyTarget ? ` | weekly goal ${task.weeklyTarget}x` : ''}
                     </Text>
                   </View>
-                  {reorderMode && sortBy === 'section' ? (
+                  {reorderMode ? (
                     <View style={styles.orderButtons}>
                       <Pressable
                         accessibilityLabel={`Move ${task.name} up`}
@@ -734,6 +765,7 @@ const styles = StyleSheet.create({
   },
   emptyText: { color: colors.muted, fontSize: 15, lineHeight: 21, textAlign: 'left' },
   filterPanel: { backgroundColor: colors.surface, borderColor: colors.softLine, borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.md },
+  filterHelp: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   group: { gap: spacing.sm },
   groupTitle: { color: colors.green, fontSize: 15, fontWeight: '900', textTransform: 'uppercase' },
   taskCard: {
