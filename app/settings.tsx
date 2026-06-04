@@ -394,6 +394,11 @@ function TutorialSection() {
         'Growth usually comes from noticing patterns, making small adjustments, and returning each day to the person you want to become. A short nightly review helps ordinary days become part of a larger story.',
     },
     {
+      title: 'First-time setup',
+      text:
+        'When you first start, Daily Cheshbon introduces the system and lets you choose a simple starter set of practices. Use the defaults as a beginning, then adjust the system as your real life becomes clearer.',
+    },
+    {
       title: 'How to review',
       text:
         'Use the Review page at night. Start with bedtime and wake time, then move through Morning, Afternoon, Night, and Overview. Answer honestly from memory. You do not need to track every moment during the day.',
@@ -431,7 +436,7 @@ function TutorialSection() {
     {
       title: 'Rearranging practices',
       text:
-        'On the Practices page, choose the review-section sort and press Reorder. Use the up and down buttons to put practices in the order you want them to appear during the review, even when they come from different routines.',
+        'On the Practices page, press Rearrange, choose the routine you want to adjust, and use the up and down buttons to order practices inside that routine. Each review section is ordered separately.',
     },
     {
       title: 'Blockers',

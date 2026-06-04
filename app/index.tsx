@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
-import { getHomeSummary, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
+import { getHomeSummary, getOnboardingStatus, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
 import { getCloudStatus, type CloudStatus } from '@/src/services/cloudSyncService';
 import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 
@@ -23,10 +23,15 @@ export default function HomeScreen() {
       Promise.all([
         getHomeSummary(today),
         getReminderPreferences(),
+        getOnboardingStatus(),
         getCloudStatus().catch(() => ({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null })),
       ])
-        .then(([nextSummary, nextReminderPreferences, nextCloudStatus]) => {
+        .then(([nextSummary, nextReminderPreferences, nextOnboardingStatus, nextCloudStatus]) => {
           if (active) {
+            if (nextOnboardingStatus.needsOnboarding) {
+              router.replace('/welcome');
+              return;
+            }
             setSummary(nextSummary);
             setReminderPreferences(nextReminderPreferences);
             setCloudStatus(nextCloudStatus);

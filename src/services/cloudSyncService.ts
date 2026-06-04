@@ -79,9 +79,9 @@ export async function signUpForCloud(name: string, email: string, password: stri
   if (error) throw error;
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectPath = '/settings') {
   const client = requireSupabase();
-  const redirectTo = getAuthRedirectUrl();
+  const redirectTo = getAuthRedirectUrl(redirectPath);
   const { data, error } = await client.auth.signInWithOAuth({
     provider: 'google',
     options: {
@@ -232,12 +232,13 @@ async function requireUser() {
   return data.user;
 }
 
-function getAuthRedirectUrl() {
+function getAuthRedirectUrl(redirectPath = '/settings') {
+  const normalizedPath = redirectPath.startsWith('/') ? redirectPath : `/${redirectPath}`;
   if (typeof window !== 'undefined' && window.location?.origin) {
     if (legacyProductionHosts.has(window.location.hostname) || window.location.hostname.endsWith('.vercel.app')) {
-      return `${productionAppOrigin}/settings`;
+      return `${productionAppOrigin}${normalizedPath}`;
     }
-    return `${window.location.origin}/settings`;
+    return `${window.location.origin}${normalizedPath}`;
   }
   return undefined;
 }

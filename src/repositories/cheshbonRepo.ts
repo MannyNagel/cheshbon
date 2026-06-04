@@ -37,6 +37,21 @@ export type ReminderPreferences = {
   morningReminderTime: string;
 };
 
+export type OnboardingStatus = {
+  completed: boolean;
+  hasReviewData: boolean;
+  needsOnboarding: boolean;
+};
+
+export type OnboardingPracticeOption = {
+  routinePracticeId: string;
+  practiceName: string;
+  routineName: string;
+  reviewSectionName: string;
+  domainName: string;
+  enabled: boolean;
+};
+
 const defaultReminderPreferences: ReminderPreferences = {
   taskRemindersEnabled: false,
   morningReminderEnabled: true,
@@ -134,6 +149,88 @@ function normalizeReminderTime(value: string) {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
   if (!match) return defaultReminderPreferences.morningReminderTime;
   return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+export async function getOnboardingStatus(): Promise<OnboardingStatus> {
+  const db = await getDb();
+  const [preference, reviewData] = await Promise.all([
+    db.getFirstAsync<{ value: string }>("SELECT value FROM app_preferences WHERE key = 'onboarding_completed'"),
+    db.getFirstAsync<{ count: number }>(
+      `SELECT
+        (SELECT COUNT(*) FROM daily_entries WHERE user_id = ?) +
+        (SELECT COUNT(*) FROM daily_review_sessions WHERE user_id = ?) as count`,
+      LOCAL_USER_ID,
+      LOCAL_USER_ID,
+    ),
+  ]);
+  const completed = parseBooleanPreference(preference?.value, false);
+  const hasReviewData = (reviewData?.count ?? 0) > 0;
+  return {
+    completed: completed || hasReviewData,
+    hasReviewData,
+    needsOnboarding: !completed && !hasReviewData,
+  };
+}
+
+export async function getOnboardingPracticeOptions(): Promise<OnboardingPracticeOption[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    routinePracticeId: string;
+    practiceName: string;
+    routineName: string;
+    reviewSectionName: string;
+    domainName: string;
+    enabled: number;
+    routinePriority: number;
+    sectionSortOrder: number;
+    sortOrder: number;
+  }>(
+    `SELECT
+      rp.id as routinePracticeId,
+      p.name as practiceName,
+      rt.name as routineName,
+      rs.name as reviewSectionName,
+      d.name as domainName,
+      rp.enabled,
+      rt.priority as routinePriority,
+      rs.sort_order as sectionSortOrder,
+      rp.sort_order as sortOrder
+     FROM routine_practices rp
+     JOIN practices p ON p.id = rp.practice_id
+     JOIN routine_templates rt ON rt.id = rp.routine_template_id
+     JOIN review_sections rs ON rs.id = rp.review_section_id
+     JOIN domains d ON d.id = p.domain_id
+     WHERE rp.archived_from IS NULL
+      AND p.active = 1
+      AND rt.id IN ('routine_core', 'routine_shabbos', 'routine_rosh_chodesh')
+     ORDER BY rt.priority, rs.sort_order, rp.sort_order, p.name`,
+  );
+  return rows.map((row) => ({
+    routinePracticeId: row.routinePracticeId,
+    practiceName: row.practiceName,
+    routineName: row.routineName,
+    reviewSectionName: row.reviewSectionName,
+    domainName: row.domainName,
+    enabled: row.enabled === 1,
+  }));
+}
+
+export async function completeOnboarding(selectedRoutinePracticeIds: string[]) {
+  const db = await getDb();
+  const starterRows = await getOnboardingPracticeOptions();
+  const starterIds = starterRows.map((row) => row.routinePracticeId);
+  const selectedIds = new Set(selectedRoutinePracticeIds);
+  await db.withTransactionAsync(async () => {
+    for (const routinePracticeId of starterIds) {
+      await db.runAsync(
+        'UPDATE routine_practices SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        selectedIds.has(routinePracticeId) ? 1 : 0,
+        routinePracticeId,
+      );
+    }
+    await setPreference(db, 'onboarding_completed', '1');
+    await setPreference(db, 'onboarding_completed_at', new Date().toISOString());
+  });
 }
 
 export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeSummary> {
