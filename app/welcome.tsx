@@ -1,4 +1,4 @@
-import { Check, LogIn, ShieldCheck, Sparkles, UserPlus } from 'lucide-react-native';
+import { BarChart3, BookOpen, CalendarDays, Check, ListChecks, LogIn, Sparkles, Target, UserPlus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -135,18 +135,24 @@ export default function WelcomeScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
-        <Image
-          accessibilityIgnoresInvertColors
-          accessible
-          accessibilityLabel="Daily Cheshbon logo"
-          resizeMode="contain"
-          source={require('@/assets/daily-cheshbon-logo-title.png')}
-          style={styles.logo}
-        />
-        <Text style={styles.eyebrow}>Welcome</Text>
-        <Text style={styles.title}>Build a nightly cheshbon that feels honest and doable.</Text>
+        <View style={styles.brandRow}>
+          <Image
+            accessibilityIgnoresInvertColors
+            accessible
+            accessibilityLabel="Daily Cheshbon logo"
+            resizeMode="contain"
+            source={require('@/assets/daily-cheshbon-logo.png')}
+            style={styles.logoMark}
+          />
+          <View style={styles.brandText}>
+            <Text style={styles.appName}>Daily Cheshbon</Text>
+            <Text style={styles.tagline}>A nightly cheshbon hanefesh for intentional growth.</Text>
+          </View>
+        </View>
+        <Text style={styles.eyebrow}>Intentional Growth</Text>
+        <Text style={styles.title}>A gentle structure for self-awareness and real growth.</Text>
         <Text style={styles.subtitle}>
-          Daily Cheshbon helps you pause at the end of the day, review what mattered, and notice the patterns that shape growth.
+          Daily Cheshbon helps you pause at night, review the practices that matter, and notice the patterns that shape your avodas Hashem and daily life.
         </Text>
       </View>
 
@@ -154,26 +160,13 @@ export default function WelcomeScreen() {
 
       {!signedIn ? (
         <>
-          <View style={styles.panel}>
-            <IntroRow
-              icon={<Sparkles color={colors.green} size={18} />}
-              title="Start small"
-              text="Begin with a few practices that matter now. You can add, remove, and rearrange later."
-            />
-            <IntroRow
-              icon={<ShieldCheck color={colors.blue} size={18} />}
-              title="Keep it with you"
-              text="Create an account so your cheshbon can follow you between phone and computer."
-            />
-            <IntroRow
-              icon={<Check color={colors.green} size={18} />}
-              title="Review at night"
-              text="The app is built for a calm nightly review, not constant tracking during the day."
-            />
-          </View>
+          <ProductTour />
 
           <View style={styles.accountPanel}>
             <Text style={styles.sectionTitle}>Get started</Text>
+            <Text style={styles.bodyText}>
+              Create your account, choose the default starter practices, and begin shaping the system around your own life.
+            </Text>
             <View style={styles.actions}>
               <ActionButton
                 disabled={busy}
@@ -194,6 +187,10 @@ export default function WelcomeScreen() {
                 onPress={() => setAuthMode('signIn')}
               />
             </View>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/learn-more')} style={styles.learnButton}>
+              <BookOpen color={colors.blue} size={17} />
+              <Text style={styles.learnButtonText}>Learn more</Text>
+            </Pressable>
             {authMode ? (
               <View style={styles.authForm}>
                 {authMode === 'create' ? (
@@ -238,57 +235,223 @@ export default function WelcomeScreen() {
           </View>
         </>
       ) : (
-        <View style={styles.setupPanel}>
-          <View style={styles.setupHeader}>
-            <Text style={styles.sectionTitle}>Choose your starting practices</Text>
-            <Text style={styles.bodyText}>
-              These are the current recommended defaults. Keep what feels useful for now. You can change everything later from Practices.
-            </Text>
-          </View>
-          {groupedPractices.map((group) => (
-            <View key={group.title} style={styles.practiceGroup}>
-              <Text style={styles.groupTitle}>{group.title}</Text>
-              {group.practices.map((practice) => {
-                const selected = selectedIds.includes(practice.routinePracticeId);
-                return (
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    key={practice.routinePracticeId}
-                    onPress={() => togglePractice(practice.routinePracticeId)}
-                    style={[styles.practiceRow, selected && styles.practiceRowSelected]}
-                  >
-                    <View style={[styles.checkBox, selected && styles.checkBoxSelected]}>
-                      {selected ? <Check color="#FFFFFF" size={14} /> : null}
-                    </View>
-                    <View style={styles.practiceText}>
-                      <Text style={styles.practiceName}>{practice.practiceName}</Text>
-                      <Text style={styles.practiceMeta}>
-                        {practice.reviewSectionName} · {practice.domainName}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
+        <>
+          <ProductTour compact />
+          <View style={styles.setupPanel}>
+            <View style={styles.setupHeader}>
+              <Text style={styles.sectionTitle}>Choose your starting practices</Text>
+              <Text style={styles.bodyText}>
+                These are the current recommended defaults. Keep what feels useful for now. You can change everything later from Practices.
+              </Text>
             </View>
-          ))}
-          <Pressable accessibilityRole="button" disabled={busy || selectedIds.length === 0} onPress={finishSetup} style={[styles.primaryButton, (busy || selectedIds.length === 0) && styles.disabled]}>
-            <Text style={styles.primaryButtonText}>{busy ? 'Saving...' : 'Finish setup'}</Text>
-          </Pressable>
-        </View>
+            {groupedPractices.map((group) => (
+              <View key={group.title} style={styles.practiceGroup}>
+                <Text style={styles.groupTitle}>{group.title}</Text>
+                {group.practices.map((practice) => {
+                  const selected = selectedIds.includes(practice.routinePracticeId);
+                  return (
+                    <Pressable
+                      accessibilityRole="checkbox"
+                      key={practice.routinePracticeId}
+                      onPress={() => togglePractice(practice.routinePracticeId)}
+                      style={[styles.practiceRow, selected && styles.practiceRowSelected]}
+                    >
+                      <View style={[styles.checkBox, selected && styles.checkBoxSelected]}>
+                        {selected ? <Check color="#FFFFFF" size={14} /> : null}
+                      </View>
+                      <View style={styles.practiceText}>
+                        <Text style={styles.practiceName}>{practice.practiceName}</Text>
+                        <Text style={styles.practiceMeta}>
+                          {practice.reviewSectionName} · {practice.domainName}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+            <Pressable accessibilityRole="button" disabled={busy || selectedIds.length === 0} onPress={finishSetup} style={[styles.primaryButton, (busy || selectedIds.length === 0) && styles.disabled]}>
+              <Text style={styles.primaryButtonText}>{busy ? 'Saving...' : 'Finish setup'}</Text>
+            </Pressable>
+          </View>
+        </>
       )}
     </ScrollView>
   );
 }
 
-function IntroRow({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) {
+function ProductTour({ compact = false }: { compact?: boolean }) {
+  const sections = [
+    {
+      icon: <Sparkles color={colors.green} size={18} />,
+      title: 'Cheshbon hanefesh for self-awareness',
+      text: 'Reviewing the day turns ordinary moments into information. The goal is not guilt or a score. It is honest awareness that leads to intentional growth.',
+      preview: <ReviewPreview />,
+    },
+    {
+      icon: <ListChecks color={colors.blue} size={18} />,
+      title: 'Practices that match your real life',
+      text: 'Practices are the questions and habits you review: tefillah, gratitude, phone use, eating, learning, middos, reflections, and anything else you want to notice.',
+      preview: <PracticesPreview />,
+    },
+    {
+      icon: <CalendarDays color={colors.green} size={18} />,
+      title: 'Routines keep each day relevant',
+      text: 'A regular weekday, Shabbos, vacation, work, or Rosh Chodesh can each have its own routine. You only review what actually applies.',
+      preview: <RoutinePreview />,
+    },
+    {
+      icon: <BarChart3 color={colors.blue} size={18} />,
+      title: 'Trends reveal patterns over time',
+      text: 'Daily entries become a longer view of growth: what is improving, what needs attention, and which patterns are worth noticing.',
+      preview: <TrendsPreview />,
+    },
+  ];
+
   return (
-    <View style={styles.introRow}>
-      <View style={styles.introIcon}>{icon}</View>
-      <View style={styles.introText}>
-        <Text style={styles.smallTitle}>{title}</Text>
-        <Text style={styles.bodyText}>{text}</Text>
+    <View style={[styles.tour, compact && styles.tourCompact]}>
+      <View style={styles.tourHeader}>
+        <Text style={styles.sectionTitle}>What Daily Cheshbon helps you do</Text>
+        <Text style={styles.bodyText}>
+          The app is built around a simple nightly rhythm: choose meaningful practices, review honestly, and let the trends help you see your growth with more clarity.
+        </Text>
       </View>
+      {sections.map((section, index) => {
+        if (compact && index > 1) return null;
+        return (
+          <FeatureSection key={section.title} icon={section.icon} title={section.title} text={section.text}>
+            {section.preview}
+          </FeatureSection>
+        );
+      })}
     </View>
+  );
+}
+
+function FeatureSection({
+  children,
+  icon,
+  title,
+  text,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <View style={styles.featureRow}>
+      <View style={styles.featureCopy}>
+        <View style={styles.featureTitleRow}>
+          <View style={styles.introIcon}>{icon}</View>
+          <Text style={styles.featureTitle}>{title}</Text>
+        </View>
+        <Text style={styles.featureText}>{text}</Text>
+      </View>
+      <View style={styles.previewColumn}>{children}</View>
+    </View>
+  );
+}
+
+function PreviewFrame({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.previewFrame}>
+      <View style={styles.previewTopBar}>
+        <View style={styles.previewDot} />
+        <Text style={styles.previewTitle}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function ReviewPreview() {
+  return (
+    <PreviewFrame title="Nightly review">
+      <Text style={styles.previewSectionLabel}>Morning</Text>
+      <View style={styles.previewQuestion}>
+        <Text style={styles.previewQuestionText}>Modeh Ani</Text>
+        <View style={styles.previewPills}>
+          <Text style={[styles.previewPill, styles.previewPillActive]}>Yes</Text>
+          <Text style={styles.previewPill}>No</Text>
+        </View>
+      </View>
+      <View style={styles.previewQuestion}>
+        <Text style={styles.previewQuestionText}>Shacharis quality</Text>
+        <View style={styles.previewRatingRow}>
+          {[1, 2, 3, 4, 5].map((rating) => (
+            <View key={rating} style={[styles.previewRatingDot, rating <= 4 && styles.previewRatingDotActive]} />
+          ))}
+        </View>
+      </View>
+      <View style={styles.previewNote}>
+        <Text style={styles.previewNoteText}>One thing I want to work on tomorrow...</Text>
+      </View>
+    </PreviewFrame>
+  );
+}
+
+function PracticesPreview() {
+  return (
+    <PreviewFrame title="Practices">
+      {[
+        ['Daily reflection', 'Reflection · Night'],
+        ['Brachot', 'Spiritual · Overview'],
+        ['Positive speech', 'Middos · Overview'],
+      ].map(([name, meta]) => (
+        <View key={name} style={styles.previewListRow}>
+          <View style={styles.previewCheckTiny}>
+            <Check color="#FFFFFF" size={10} />
+          </View>
+          <View style={styles.previewListText}>
+            <Text style={styles.previewQuestionText}>{name}</Text>
+            <Text style={styles.previewMeta}>{meta}</Text>
+          </View>
+        </View>
+      ))}
+    </PreviewFrame>
+  );
+}
+
+function RoutinePreview() {
+  return (
+    <PreviewFrame title="Routines">
+      {[
+        ['Weekly Core', 'Sun-Fri · Active'],
+        ['Shabbos', 'Saturday · Active'],
+        ['Vacation', 'Custom dates · Inactive'],
+      ].map(([name, meta]) => (
+        <View key={name} style={styles.previewRoutineRow}>
+          <Target color={colors.green} size={14} />
+          <View style={styles.previewListText}>
+            <Text style={styles.previewQuestionText}>{name}</Text>
+            <Text style={styles.previewMeta}>{meta}</Text>
+          </View>
+        </View>
+      ))}
+    </PreviewFrame>
+  );
+}
+
+function TrendsPreview() {
+  return (
+    <PreviewFrame title="Trends">
+      <View style={styles.previewChartRow}>
+        {[42, 64, 54, 78, 70, 86].map((height, index) => (
+          <View key={`${height}-${index}`} style={[styles.previewBar, { height }]} />
+        ))}
+      </View>
+      <View style={styles.previewStatsRow}>
+        <View style={styles.previewStat}>
+          <Text style={styles.previewStatValue}>4.1</Text>
+          <Text style={styles.previewMeta}>week</Text>
+        </View>
+        <View style={styles.previewStat}>
+          <Text style={styles.previewStatValue}>73%</Text>
+          <Text style={styles.previewMeta}>month</Text>
+        </View>
+      </View>
+    </PreviewFrame>
   );
 }
 
@@ -320,13 +483,38 @@ const styles = StyleSheet.create({
     paddingBottom: 96,
   },
   hero: {
-    gap: spacing.sm,
+    gap: spacing.md,
     paddingTop: spacing.md,
   },
-  logo: {
-    alignSelf: 'flex-start',
-    height: 116,
-    width: 220,
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  logoMark: {
+    borderRadius: 8,
+    height: 78,
+    width: 78,
+  },
+  brandText: {
+    flex: 1,
+    gap: spacing.xs,
+    minWidth: 220,
+  },
+  appName: {
+    color: colors.ink,
+    fontSize: 34,
+    fontWeight: '900',
+    lineHeight: 38,
+    textAlign: 'left',
+  },
+  tagline: {
+    color: colors.green,
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 21,
+    textAlign: 'left',
   },
   eyebrow: {
     color: colors.green,
@@ -336,9 +524,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 34,
+    fontSize: 31,
     fontWeight: '900',
-    lineHeight: 39,
+    lineHeight: 37,
     textAlign: 'left',
   },
   subtitle: {
@@ -347,13 +535,20 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     textAlign: 'left',
   },
-  panel: {
+  tour: {
     backgroundColor: colors.surface,
     borderColor: colors.softLine,
     borderRadius: 8,
     borderWidth: 1,
-    gap: spacing.md,
+    gap: spacing.lg,
     padding: spacing.lg,
+  },
+  tourCompact: {
+    backgroundColor: colors.blueSoft,
+    borderColor: '#BFD2F7',
+  },
+  tourHeader: {
+    gap: spacing.xs,
   },
   accountPanel: {
     backgroundColor: colors.blueSoft,
@@ -380,10 +575,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'left',
   },
-  introRow: {
-    alignItems: 'flex-start',
+  featureRow: {
+    alignItems: 'stretch',
     flexDirection: 'row',
-    gap: spacing.md,
+    flexWrap: 'wrap',
+    gap: spacing.lg,
+  },
+  featureCopy: {
+    flex: 1,
+    gap: spacing.sm,
+    minWidth: 240,
+  },
+  featureTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   introIcon: {
     alignItems: 'center',
@@ -395,14 +601,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
-  introText: {
+  featureTitle: {
+    color: colors.ink,
     flex: 1,
-    gap: spacing.xs,
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 22,
+    textAlign: 'left',
   },
-  smallTitle: {
+  featureText: {
     color: colors.ink,
     fontSize: 15,
-    fontWeight: '900',
+    lineHeight: 22,
     textAlign: 'left',
   },
   bodyText: {
@@ -415,6 +625,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  learnButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surface,
+    borderColor: '#BFD2F7',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  learnButtonText: {
+    color: colors.blue,
+    fontSize: 14,
+    fontWeight: '900',
   },
   actionButton: {
     alignItems: 'center',
@@ -519,6 +746,188 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
+  },
+  previewColumn: {
+    flex: 1,
+    minWidth: 250,
+  },
+  previewFrame: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  previewTopBar: {
+    alignItems: 'center',
+    borderBottomColor: colors.softLine,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  previewDot: {
+    backgroundColor: colors.green,
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
+  previewTitle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'left',
+    textTransform: 'uppercase',
+  },
+  previewSectionLabel: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'left',
+    textTransform: 'uppercase',
+  },
+  previewQuestion: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  previewQuestionText: {
+    color: colors.ink,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 18,
+    textAlign: 'left',
+  },
+  previewPills: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  previewPill: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textAlign: 'center',
+  },
+  previewPillActive: {
+    backgroundColor: colors.green,
+    borderColor: colors.green,
+    color: '#FFFFFF',
+  },
+  previewRatingRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  previewRatingDot: {
+    backgroundColor: colors.softLine,
+    borderRadius: 7,
+    height: 14,
+    width: 14,
+  },
+  previewRatingDotActive: {
+    backgroundColor: colors.green,
+  },
+  previewNote: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.green,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: spacing.sm,
+  },
+  previewNoteText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'left',
+  },
+  previewListRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  previewCheckTiny: {
+    alignItems: 'center',
+    backgroundColor: colors.green,
+    borderRadius: 6,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  previewListText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  previewMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+    textAlign: 'left',
+  },
+  previewRoutineRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.sm,
+  },
+  previewChartRow: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    height: 104,
+    justifyContent: 'space-between',
+    padding: spacing.sm,
+  },
+  previewBar: {
+    backgroundColor: colors.green,
+    borderRadius: 6,
+    flex: 1,
+    maxWidth: 34,
+    minWidth: 18,
+  },
+  previewStatsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  previewStat: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    padding: spacing.sm,
+  },
+  previewStatValue: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'left',
   },
   disabled: {
     opacity: 0.55,
