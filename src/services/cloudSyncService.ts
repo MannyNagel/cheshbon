@@ -1,5 +1,6 @@
 import { resetDatabaseToSeedDefaults } from '@/src/db/client';
 import { exportAllData, importAllData } from '@/src/repositories/cheshbonRepo';
+import { mergeCloudSnapshots, type SnapshotPayload } from '@/src/services/cloudSnapshotMerge';
 import { isSupabaseConfigured, supabase } from '@/src/services/supabaseClient';
 
 const productionAppOrigin = 'https://dailycheshbon.com';
@@ -170,7 +171,10 @@ export async function pushLocalDataToCloudIfSignedIn() {
 }
 
 async function pushLocalDataForUser(client: NonNullable<typeof supabase>, userId: string) {
-  const snapshot = JSON.parse(await exportAllData());
+  const localSnapshot = JSON.parse(await exportAllData()) as SnapshotPayload;
+  const cloudSnapshot = await getCloudSnapshotForUser(client, userId);
+  const snapshot = mergeCloudSnapshots(localSnapshot, cloudSnapshot.snapshot);
+  await importAllData(JSON.stringify(snapshot));
   const now = new Date().toISOString();
   const { error } = await client.from('cloud_snapshots').upsert(
     {
@@ -202,19 +206,38 @@ export async function pullCloudDataToLocalIfAvailable() {
 }
 
 async function pullCloudDataForUser(client: NonNullable<typeof supabase>, userId: string) {
-  const { data, error } = await client
-    .from('cloud_snapshots')
-    .select('snapshot, updated_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data?.snapshot) return null;
+  const cloudSnapshot = await getCloudSnapshotForUser(client, userId);
+  if (!cloudSnapshot.snapshot) return null;
   try {
-    await importAllData(JSON.stringify(data.snapshot));
+    const localSnapshot = JSON.parse(await exportAllData()) as SnapshotPayload;
+    const snapshot = mergeCloudSnapshots(localSnapshot, cloudSnapshot.snapshot);
+    await importAllData(JSON.stringify(snapshot));
+    const now = new Date().toISOString();
+    const { error } = await client.from('cloud_snapshots').upsert(
+      {
+        user_id: userId,
+        snapshot,
+        updated_at: now,
+      },
+      { onConflict: 'user_id' },
+    );
+    if (error) throw error;
+    return now;
   } catch (importError) {
     throw new Error(importError instanceof Error ? `Cloud restore failed: ${importError.message}` : 'Cloud restore failed.');
   }
-  return data.updated_at as string;
+}
+
+async function getCloudSnapshotForUser(client: NonNullable<typeof supabase>, userId: string) {
+  const { data, error } = await client
+    .from('cloud_snapshots')
+    .select('snapshot')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return {
+    snapshot: data?.snapshot as SnapshotPayload | null | undefined,
+  };
 }
 
 function requireSupabase() {

@@ -7,7 +7,7 @@ import { monthDay } from '@/src/utils/dates';
 
 type PracticeTrend = TrendSummary['practiceTrends'][number];
 
-export function TrendPracticeCard({ practice }: { practice: PracticeTrend }) {
+export function TrendPracticeCard({ practice, weekLabel = 'Week' }: { practice: PracticeTrend; weekLabel?: string }) {
   if (practice.metricKind === 'text') {
     return (
       <View style={styles.practiceCard}>
@@ -44,12 +44,12 @@ export function TrendPracticeCard({ practice }: { practice: PracticeTrend }) {
         <MetricKindBadge kind={practice.metricKind} />
       </View>
       <View style={styles.statGrid}>
-        <StatPill label="Week" value={formatWindowAverage(practice.week.average, practice.unitLabel)} />
+        <StatPill label={weekLabel} value={formatWindowAverage(practice.week.average, practice.unitLabel)} />
         <StatPill label="Month" value={formatWindowAverage(practice.month.average, practice.unitLabel)} />
         <StatPill label="All time" value={formatWindowAverage(practice.allTime.average, practice.unitLabel)} />
       </View>
       <View style={styles.chartGrid}>
-        <TrendBlock title="Week" unitLabel={practice.unitLabel} window={practice.week} tight />
+        <TrendBlock title={weekLabel} unitLabel={practice.unitLabel} window={practice.week} tight />
         <TrendBlock title="Month" unitLabel={practice.unitLabel} window={practice.month} tight />
       </View>
     </View>

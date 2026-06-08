@@ -46,7 +46,7 @@ export default function DomainTrendsScreen() {
 
       <View style={styles.summaryCard}>
         <View style={styles.statPill}>
-          <Text style={styles.statLabel}>Week blend</Text>
+          <Text style={styles.statLabel}>{summary.weekLabel} blend</Text>
           <Text style={styles.statValue}>{formatScore(domain?.score7 ?? null)}</Text>
         </View>
         <View style={styles.statPill}>
@@ -61,7 +61,7 @@ export default function DomainTrendsScreen() {
 
       <View style={styles.practiceList}>
         {practices.length ? (
-          practices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} />)
+          practices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} weekLabel={summary.weekLabel} />)
         ) : (
           <Text style={styles.empty}>No practice stats found for this domain yet.</Text>
         )}

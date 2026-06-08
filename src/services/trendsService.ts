@@ -1,6 +1,7 @@
 import { getDb } from '@/src/db/client';
-import type { MetricType, TrendSummary, TrendWindow } from '@/src/models/types';
-import { addDaysIso, daysAgoIso, shortDayName, todayIsoDate } from '@/src/utils/dates';
+import type { MetricType, TrendSummary, TrendWeekMode, TrendWindow } from '@/src/models/types';
+import { getTrendPreferences } from '@/src/repositories/cheshbonRepo';
+import { addDaysIso, dayOfWeek, daysAgoIso, shortDayName, todayIsoDate } from '@/src/utils/dates';
 
 type MetricRow = {
   practice_id: string;
@@ -23,10 +24,12 @@ type ScoreValue = {
 
 type NumericValue = { date: string; value: number };
 type TextValue = { date: string; text: string };
+type WeekWindow = { mode: TrendWeekMode; label: string; start: string; end: string };
 
 export async function getTrendSummary(): Promise<TrendSummary> {
   const db = await getDb();
-  const start7 = daysAgoIso(6);
+  const trendPreferences = await getTrendPreferences();
+  const weekWindow = getWeekWindow(trendPreferences.weekMode);
   const start30 = daysAgoIso(29);
 
   const metricRows = await db.getAllAsync<MetricRow>(
@@ -55,7 +58,7 @@ export async function getTrendSummary(): Promise<TrendSummary> {
 
   const practices = groupPractices(metricRows);
   const [scores7, scores30, commonBlockers] = await Promise.all([
-    getPracticeScores(start7),
+    getPracticeScores(weekWindow.start, weekWindow.end),
     getPracticeScores(start30),
     db.getAllAsync<{
       blocker_id: string;
@@ -84,11 +87,13 @@ export async function getTrendSummary(): Promise<TrendSummary> {
   const domainInsights = buildDomainInsights(scores7, scores30);
   const practiceTrends = [];
   for (const practice of practices) {
-    const trend = await buildPracticeTrend(practice);
+    const trend = await buildPracticeTrend(practice, weekWindow);
     if (trend) practiceTrends.push(trend);
   }
 
   return {
+    weekMode: weekWindow.mode,
+    weekLabel: weekWindow.label,
     domainInsights,
     practiceTrends,
     commonBlockers: commonBlockers.map((row) => ({
@@ -128,8 +133,14 @@ function groupPractices(rows: MetricRow[]) {
   return [...map.values()];
 }
 
-async function getPracticeScores(startDate: string): Promise<ScoreValue[]> {
+async function getPracticeScores(startDate: string, endDate?: string): Promise<ScoreValue[]> {
   const db = await getDb();
+  const dateFilters = ['de.entry_date >= ?'];
+  const params: string[] = [startDate];
+  if (endDate) {
+    dateFilters.push('de.entry_date <= ?');
+    params.push(endDate);
+  }
   const rows = await db.getAllAsync<{
     practice_id: string;
     practice_name: string;
@@ -154,7 +165,7 @@ async function getPracticeScores(startDate: string): Promise<ScoreValue[]> {
      JOIN domains d ON d.id = p.domain_id
      LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
-     WHERE de.entry_date >= ?
+     WHERE ${dateFilters.join(' AND ')}
       AND p.active = 1
       AND d.active = 1
       AND EXISTS (
@@ -163,7 +174,7 @@ async function getPracticeScores(startDate: string): Promise<ScoreValue[]> {
         WHERE rp.practice_id = p.id
          AND rp.archived_from IS NULL
       )`,
-    startDate,
+    ...params,
   );
 
   const byPractice = new Map<string, {
@@ -230,7 +241,7 @@ function buildDomainInsights(scores7: ScoreValue[], scores30: ScoreValue[]): Tre
   });
 }
 
-async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[number]): Promise<TrendSummary['practiceTrends'][number] | null> {
+async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[number], weekWindow: WeekWindow): Promise<TrendSummary['practiceTrends'][number] | null> {
   const textMetric = practice.metrics.find((metric) => metric.type === 'text');
   const numberMetric = practice.metrics.find((metric) => metric.type === 'number');
   const scaleMetric = practice.metrics.find((metric) => metric.type === 'scale');
@@ -268,7 +279,7 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
       metricName: metric.name,
       metricKind: 'complete',
       unitLabel: '%',
-      week: buildWindow(values, 'week', true),
+      week: buildWindow(values, 'week', true, weekWindow),
       month: buildWindow(values, 'month', true),
       allTime: buildWindow(values, 'allTime', true),
       recentEntries: [],
@@ -285,7 +296,7 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
     metricName: metric.name,
     metricKind: metric.type === 'number' ? 'number' : 'quality',
     unitLabel: metric.type === 'number' ? 'avg' : '1-5',
-    week: buildWindow(values, 'week', false),
+    week: buildWindow(values, 'week', false, weekWindow),
     month: buildWindow(values, 'month', false),
     allTime: buildWindow(values, 'allTime', false),
     recentEntries: [],
@@ -364,28 +375,55 @@ async function getTextValues(practiceId: string, metricId: string): Promise<Text
   );
 }
 
-function buildWindow(values: NumericValue[], mode: 'week' | 'month' | 'allTime', percent: boolean): TrendWindow {
+function buildWindow(values: NumericValue[], mode: 'week' | 'month' | 'allTime', percent: boolean, weekWindow?: WeekWindow): TrendWindow {
   const today = todayIsoDate();
-  const start = mode === 'week' ? addDaysIso(today, -6) : mode === 'month' ? addDaysIso(today, -29) : null;
-  const inRange = start ? values.filter((value) => value.date >= start && value.date <= today) : values;
+  const end = mode === 'week' ? weekWindow?.end ?? today : today;
+  const start = mode === 'week' ? weekWindow?.start ?? today : mode === 'month' ? addDaysIso(today, -29) : null;
+  const inRange = start ? values.filter((value) => value.date >= start && value.date <= end) : values;
   const normalized = percent ? inRange.map((value) => value.value * 100) : inRange.map((value) => value.value);
   return {
     average: round1(average(normalized)),
     sampleSize: inRange.length,
     points: mode === 'week'
-      ? buildDailyPoints(values, today, percent)
+      ? buildDailyPoints(values, start ?? end, end, percent)
       : mode === 'month'
         ? buildRollingWeekPoints(values, today, percent)
         : buildMonthPoints(values, percent),
   };
 }
 
-function buildDailyPoints(values: NumericValue[], today: string, percent: boolean) {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = addDaysIso(today, index - 6);
+function buildDailyPoints(values: NumericValue[], startDate: string, endDate: string, percent: boolean) {
+  return Array.from({ length: daysBetweenInclusive(startDate, endDate) }, (_, index) => {
+    const date = addDaysIso(startDate, index);
     const matching = values.filter((value) => value.date === date).map((value) => percent ? value.value * 100 : value.value);
     return { label: shortDayName(date), value: round1(average(matching)) };
   });
+}
+
+function getWeekWindow(mode: TrendWeekMode): WeekWindow {
+  const today = todayIsoDate();
+  if (mode === 'rolling_7_days') {
+    return {
+      mode,
+      label: 'Past 7 days',
+      start: addDaysIso(today, -7),
+      end: addDaysIso(today, -1),
+    };
+  }
+  return {
+    mode: 'sunday_to_date',
+    label: 'This week',
+    start: addDaysIso(today, -dayOfWeek(today)),
+    end: today,
+  };
+}
+
+function daysBetweenInclusive(startDate: string, endDate: string) {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const start = new Date(startYear, startMonth - 1, startDay);
+  const end = new Date(endYear, endMonth - 1, endDay);
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
 }
 
 function buildRollingWeekPoints(values: NumericValue[], today: string, percent: boolean) {

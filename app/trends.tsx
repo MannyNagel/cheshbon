@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Search, X } from 'lucide-react-native';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, Search, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -6,7 +6,9 @@ import type { DimensionValue } from 'react-native';
 
 import { TrendPracticeCard } from '@/src/components/TrendPracticeCard';
 import { colors, spacing } from '@/src/components/ui';
-import type { TrendSummary } from '@/src/models/types';
+import type { TrendSummary, TrendWeekMode } from '@/src/models/types';
+import { updateTrendPreferences } from '@/src/repositories/cheshbonRepo';
+import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getTrendSummary } from '@/src/services/trendsService';
 
 type SortBy = 'domain' | 'name' | 'kind';
@@ -19,6 +21,7 @@ export default function TrendsScreen() {
   const [domainFilter, setDomainFilter] = useState<string>('all');
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [selectedPracticeIds, setSelectedPracticeIds] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     getTrendSummary().then(setSummary);
@@ -63,6 +66,23 @@ export default function TrendsScreen() {
     setSelectedPracticeIds((current) => current.includes(practiceId) ? current.filter((id) => id !== practiceId) : [...current, practiceId]);
   }
 
+  async function setWeekMode(weekMode: TrendWeekMode) {
+    if (!summary) return;
+    if (summary.weekMode === weekMode) return;
+    setMessage(null);
+    try {
+      await updateTrendPreferences({ weekMode });
+      try {
+        await pushLocalDataToCloudIfSignedIn();
+      } catch {
+        // The local preference still saved; the next successful app sync will carry it to cloud.
+      }
+      setSummary(await getTrendSummary());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update week range.');
+    }
+  }
+
   if (!summary) {
     return (
       <View style={styles.center}>
@@ -78,6 +98,21 @@ export default function TrendsScreen() {
         <Text style={styles.title}>Trends</Text>
         <Text style={styles.subtitle}>See how you practices are developing over time.</Text>
       </View>
+
+      <Section title="Week Range">
+        <View style={styles.filterPanel}>
+          <Text style={styles.rowMeta}>Choose how weekly trend scores are calculated.</Text>
+          <ChipRow label="Week">
+            <FilterChip label="Sunday to date" selected={summary.weekMode === 'sunday_to_date'} onPress={() => setWeekMode('sunday_to_date')} />
+            <FilterChip label="Past 7 days" selected={summary.weekMode === 'rolling_7_days'} onPress={() => setWeekMode('rolling_7_days')} />
+          </ChipRow>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/weekly-report')} style={styles.reportButton}>
+            <FileText color={colors.blue} size={18} />
+            <Text style={styles.reportButtonText}>Open weekly report</Text>
+          </Pressable>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+        </View>
+      </Section>
 
       <Section title="Domains">
         {summary.domainInsights.length ? (
@@ -95,7 +130,7 @@ export default function TrendsScreen() {
                 </View>
                 <Text style={styles.scoreText}>{formatScore(domain.score7)}</Text>
                 <Text style={styles.rowMeta}>
-                  Week blend | Month {formatScore(domain.score30)} | {domain.trackedPractices} practices
+                  {summary.weekLabel} blend | Month {formatScore(domain.score30)} | {domain.trackedPractices} practices
                 </Text>
                 <Meter value={domain.score7} max={5} />
                 <Text style={styles.domainLink}>Open domain</Text>
@@ -171,7 +206,7 @@ export default function TrendsScreen() {
       <Section title="Selected Practices">
         {selectedPractices.length ? (
           <View style={styles.practiceList}>
-            {selectedPractices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} />)}
+            {selectedPractices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} weekLabel={summary.weekLabel} />)}
           </View>
         ) : (
           <Empty text="Select one or more practice chips to see weekly, monthly, and all-time stats. Text practices show recent entries." />
@@ -386,6 +421,12 @@ const styles = StyleSheet.create({
     height: 8,
     overflow: 'hidden',
   },
+  message: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'left',
+  },
   practiceChip: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
@@ -434,6 +475,23 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: '800',
+  },
+  reportButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.blueSoft,
+    borderColor: colors.blue,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  reportButtonText: {
+    color: colors.blue,
+    fontSize: 14,
+    fontWeight: '900',
   },
   rowHeader: {
     alignItems: 'flex-start',

@@ -87,6 +87,7 @@ export default function RootLayout() {
         <Tabs.Screen name="learn-more" options={{ href: null, title: 'Learn more' }} />
         <Tabs.Screen name="welcome" options={{ href: null, title: 'Welcome' }} />
         <Tabs.Screen name="domain-trends/[domainId]" options={{ href: null, title: 'Domain Trends' }} />
+        <Tabs.Screen name="weekly-report" options={{ href: null, title: 'Weekly Report' }} />
       </Tabs>
     </SafeAreaProvider>
   );

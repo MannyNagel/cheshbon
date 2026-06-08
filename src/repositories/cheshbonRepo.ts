@@ -13,6 +13,7 @@ import type {
   MetricValueDraft,
   NightlyReviewDraft,
   RoutineTemplate,
+  TrendWeekMode,
 } from '@/src/models/types';
 import { addDaysIso, dayOfWeek, todayIsoDate } from '@/src/utils/dates';
 import { makeId } from '@/src/utils/ids';
@@ -37,6 +38,10 @@ export type ReminderPreferences = {
   morningReminderTime: string;
 };
 
+export type TrendPreferences = {
+  weekMode: TrendWeekMode;
+};
+
 export type OnboardingStatus = {
   completed: boolean;
   hasReviewData: boolean;
@@ -56,6 +61,10 @@ const defaultReminderPreferences: ReminderPreferences = {
   taskRemindersEnabled: false,
   morningReminderEnabled: true,
   morningReminderTime: '05:30',
+};
+
+const defaultTrendPreferences: TrendPreferences = {
+  weekMode: 'sunday_to_date',
 };
 
 export type HomeSummary = {
@@ -128,6 +137,24 @@ export async function updateReminderPreferences(input: Partial<ReminderPreferenc
   return next;
 }
 
+export async function getTrendPreferences(): Promise<TrendPreferences> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string }>("SELECT value FROM app_preferences WHERE key = 'trend_week_mode'");
+  return {
+    weekMode: normalizeTrendWeekMode(row?.value),
+  };
+}
+
+export async function updateTrendPreferences(input: Partial<TrendPreferences>) {
+  const db = await getDb();
+  const current = await getTrendPreferences();
+  const next: TrendPreferences = {
+    weekMode: normalizeTrendWeekMode(input.weekMode ?? current.weekMode),
+  };
+  await setPreference(db, 'trend_week_mode', next.weekMode);
+  return next;
+}
+
 async function setPreference(db: Awaited<ReturnType<typeof getDb>>, key: string, value: string) {
   await db.runAsync(
     `INSERT INTO app_preferences (key, value)
@@ -149,6 +176,10 @@ function normalizeReminderTime(value: string) {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
   if (!match) return defaultReminderPreferences.morningReminderTime;
   return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+function normalizeTrendWeekMode(value: string | undefined): TrendWeekMode {
+  return value === 'rolling_7_days' || value === 'sunday_to_date' ? value : defaultTrendPreferences.weekMode;
 }
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
@@ -1232,7 +1263,17 @@ export async function getDomainEditorRows() {
   const db = await getDb();
   return db.getAllAsync<{ id: string; name: string; description: string | null; active: number; inUse: number }>(
     `SELECT d.id, d.name, d.description, d.active,
-      CASE WHEN EXISTS (SELECT 1 FROM practices p WHERE p.domain_id = d.id AND p.active = 1) THEN 1 ELSE 0 END as inUse
+      CASE WHEN EXISTS (
+        SELECT 1
+        FROM practices p
+        JOIN routine_practices rp ON rp.practice_id = p.id
+        JOIN routine_templates rt ON rt.id = rp.routine_template_id
+        WHERE p.domain_id = d.id
+          AND p.active = 1
+          AND rp.enabled = 1
+          AND rp.archived_from IS NULL
+          AND rt.active = 1
+      ) THEN 1 ELSE 0 END as inUse
      FROM domains d
      WHERE d.active = 1
      ORDER BY d.sort_order`,
@@ -1268,7 +1309,15 @@ export async function createDomain(input: { name: string; description?: string |
 export async function deactivateDomain(domainId: string) {
   const db = await getDb();
   const inUse = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM practices WHERE domain_id = ? AND active = 1',
+    `SELECT COUNT(*) as count
+     FROM practices p
+     JOIN routine_practices rp ON rp.practice_id = p.id
+     JOIN routine_templates rt ON rt.id = rp.routine_template_id
+     WHERE p.domain_id = ?
+      AND p.active = 1
+      AND rp.enabled = 1
+      AND rp.archived_from IS NULL
+      AND rt.active = 1`,
     domainId,
   );
   if ((inUse?.count ?? 0) > 0) {
@@ -1450,5 +1499,6 @@ const exportTableNames = [
   'practice_blockers',
   'entry_blockers',
   'weekly_reviews',
+  'weekly_reports',
   'app_preferences',
 ] as const;

@@ -207,6 +207,19 @@ CREATE TABLE IF NOT EXISTS weekly_reviews (
   UNIQUE(user_id, week_start_date)
 );
 
+CREATE TABLE IF NOT EXISTS weekly_reports (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  week_start_date TEXT NOT NULL,
+  week_end_date TEXT NOT NULL,
+  report_available_from TEXT NOT NULL,
+  report_markdown TEXT NOT NULL,
+  generated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, week_start_date)
+);
+
 CREATE TABLE IF NOT EXISTS app_preferences (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,

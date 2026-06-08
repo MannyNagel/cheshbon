@@ -719,5 +719,6 @@ const resetTableNames = [
   'practice_blockers',
   'entry_blockers',
   'weekly_reviews',
+  'weekly_reports',
   'app_preferences',
 ] as const;

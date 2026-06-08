@@ -1,5 +1,7 @@
 export type MetricType = 'boolean' | 'scale' | 'number' | 'text' | 'enum';
 
+export type TrendWeekMode = 'sunday_to_date' | 'rolling_7_days';
+
 export type EntryStatus =
   | 'done'
   | 'partial'
@@ -127,6 +129,8 @@ export type NightlyReviewDraft = {
 };
 
 export type TrendSummary = {
+  weekMode: TrendWeekMode;
+  weekLabel: string;
   domainInsights: Array<{
     domainId: string;
     domainName: string;
