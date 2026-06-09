@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Mail, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,6 +8,7 @@ import {
   deactivateDomain,
   createBlocker,
   createDomain,
+  exportAllData,
   getBlockerEditorRows,
   getDomainEditorRows,
   getReminderPreferences,
@@ -29,6 +30,7 @@ import {
   signUpForCloud,
   type CloudStatus,
 } from '@/src/services/cloudSyncService';
+import { emailRawDataToSelf } from '@/src/services/emailService';
 import { clearAccessHandleBusyRecovery, scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 type DomainRow = { id: string; name: string; description: string | null; active: number; inUse: number };
@@ -140,6 +142,19 @@ export default function SettingsScreen() {
     }
   }
 
+  async function emailRawData() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const recipient = await emailRawDataToSelf(await exportAllData());
+      setMessage(`Raw data emailed to ${recipient}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not email raw data.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!cloudStatus || !reminderPreferences) {
     return (
       <View style={styles.center}>
@@ -183,6 +198,12 @@ export default function SettingsScreen() {
               icon={<CloudDownload color={colors.ink} size={17} />}
               label="Pull from cloud"
               onPress={() => runCloudAction(pullCloudDataToLocal, 'Cloud backup restored:')}
+            />
+            <ActionButton
+              disabled={busy}
+              icon={<Mail color={colors.ink} size={17} />}
+              label="Email raw data"
+              onPress={emailRawData}
             />
             <ActionButton
               disabled={busy}

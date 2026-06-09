@@ -1,9 +1,10 @@
-import { ArrowLeft, Download, FileText, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Download, FileText, Mail, Sparkles } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
+import { emailWeeklyReportToSelf } from '@/src/services/emailService';
 import {
   exportWeeklyReportMarkdown,
   generateWeeklyReport,
@@ -23,6 +24,7 @@ export default function WeeklyReportScreen() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,6 +75,20 @@ export default function WeeklyReportScreen() {
       setMessage(error instanceof Error ? error.message : 'Could not export weekly report.');
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function emailReport() {
+    if (!data || !report) return;
+    setEmailing(true);
+    setMessage(null);
+    try {
+      const recipient = await emailWeeklyReportToSelf(report, selectedReportRange(data, savedReports, selectedWeekStart));
+      setMessage(`Weekly report emailed to ${recipient}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not email weekly report.');
+    } finally {
+      setEmailing(false);
     }
   }
 
@@ -131,6 +147,10 @@ export default function WeeklyReportScreen() {
         <Pressable accessibilityRole="button" disabled={!report || exporting} onPress={exportReport} style={[styles.secondaryButton, !report && styles.disabledButton]}>
           <Download color={report ? colors.ink : colors.muted} size={18} />
           <Text style={[styles.secondaryButtonText, !report && styles.disabledText]}>{exporting ? 'Exporting...' : 'Export Markdown'}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={!report || emailing} onPress={emailReport} style={[styles.secondaryButton, !report && styles.disabledButton]}>
+          <Mail color={report ? colors.ink : colors.muted} size={18} />
+          <Text style={[styles.secondaryButtonText, !report && styles.disabledText]}>{emailing ? 'Emailing...' : 'Email report'}</Text>
         </Pressable>
       </View>
 
