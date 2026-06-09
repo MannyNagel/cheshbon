@@ -16,6 +16,13 @@ import {
   type WeeklyReportData,
 } from '@/src/services/weeklyReportService';
 
+type ReportEmailRange = {
+  weekStart: string;
+  weekEnd?: string;
+  reportThrough?: string;
+  availableFrom?: string;
+};
+
 export default function WeeklyReportScreen() {
   const [data, setData] = useState<WeeklyReportData | null>(null);
   const [report, setReport] = useState<string | null>(null);
@@ -83,8 +90,20 @@ export default function WeeklyReportScreen() {
     setEmailing(true);
     setMessage(null);
     try {
-      const recipient = await emailWeeklyReportToSelf(report, selectedReportRange(data, savedReports, selectedWeekStart));
-      setMessage(`Weekly report emailed to ${recipient}.`);
+      const range = selectedReportRange(data, savedReports, selectedWeekStart);
+      const rangeEnd = range.reportThrough ?? range.weekEnd ?? range.weekStart;
+      const weeklyData = await getWeeklyReportData({
+        weekStart: range.weekStart,
+        weekEnd: range.weekEnd ?? rangeEnd,
+        reportThrough: rangeEnd,
+        availableFrom: range.availableFrom ?? data.availableFrom,
+      });
+      const recipient = await emailWeeklyReportToSelf(
+        report,
+        range,
+        JSON.stringify({ exportedAt: new Date().toISOString(), weeklyData }, null, 2),
+      );
+      setMessage(`Weekly report and weekly data emailed to ${recipient}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not email weekly report.');
     } finally {
@@ -150,7 +169,7 @@ export default function WeeklyReportScreen() {
         </Pressable>
         <Pressable accessibilityRole="button" disabled={!report || emailing} onPress={emailReport} style={[styles.secondaryButton, !report && styles.disabledButton]}>
           <Mail color={report ? colors.ink : colors.muted} size={18} />
-          <Text style={[styles.secondaryButtonText, !report && styles.disabledText]}>{emailing ? 'Emailing...' : 'Email report'}</Text>
+          <Text style={[styles.secondaryButtonText, !report && styles.disabledText]}>{emailing ? 'Emailing...' : 'Email report + data'}</Text>
         </Pressable>
       </View>
 
@@ -206,12 +225,17 @@ function SummaryPill({ label, value }: { label: string; value: string }) {
   );
 }
 
-function selectedReportRange(data: WeeklyReportData, savedReports: SavedWeeklyReport[], selectedWeekStart: string | null) {
+function selectedReportRange(data: WeeklyReportData, savedReports: SavedWeeklyReport[], selectedWeekStart: string | null): ReportEmailRange {
   const savedReport = savedReports.find((item) => item.weekStart === selectedWeekStart);
   if (savedReport) {
-    return { weekStart: savedReport.weekStart, weekEnd: savedReport.weekEnd };
+    return { weekStart: savedReport.weekStart, weekEnd: savedReport.weekEnd, availableFrom: savedReport.availableFrom };
   }
-  return data;
+  return {
+    weekStart: data.weekStart,
+    weekEnd: data.weekEnd,
+    reportThrough: data.reportThrough,
+    availableFrom: data.availableFrom,
+  };
 }
 
 const styles = StyleSheet.create({

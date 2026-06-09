@@ -46,16 +46,25 @@ export async function emailRawDataToSelf(json: string) {
   });
 }
 
-export async function emailWeeklyReportToSelf(reportMarkdown: string, range: { weekStart: string; weekEnd?: string; reportThrough?: string }) {
+export async function emailWeeklyReportToSelf(
+  reportMarkdown: string,
+  range: { weekStart: string; weekEnd?: string; reportThrough?: string },
+  weeklyDataJson: string,
+) {
   const end = range.reportThrough ?? range.weekEnd ?? range.weekStart;
   return emailSelf({
     subject: `Daily Cheshbon weekly report - ${range.weekStart} to ${end}`,
-    text: 'Your Daily Cheshbon weekly report is attached as Markdown.',
+    text: 'Your Daily Cheshbon weekly report and the raw weekly data used for it are attached.',
     attachments: [
       {
         filename: `daily-cheshbon-weekly-report-${range.weekStart}-to-${end}.md`,
         content: reportMarkdown,
         contentType: 'text/markdown; charset=utf-8',
+      },
+      {
+        filename: `daily-cheshbon-weekly-data-${range.weekStart}-to-${end}.json`,
+        content: weeklyDataJson,
+        contentType: 'application/json; charset=utf-8',
       },
     ],
   });
