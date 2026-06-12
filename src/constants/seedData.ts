@@ -320,6 +320,24 @@ export const practices: PracticeSeed[] = [
     ],
   },
   {
+    id: 'practice_daily_avodah_review',
+    domainId: 'domain_current_avodah',
+    name: 'Daily Avodah Review',
+    description: 'Reflect on how today\'s Daily Avodah went.',
+    metrics: [
+      { id: 'metric_daily_avodah_review_completed', name: 'Completed', metricType: 'boolean' },
+    ],
+  },
+  {
+    id: 'practice_weekly_avodah_review',
+    domainId: 'domain_current_avodah',
+    name: 'Weekly Avodah Review',
+    description: 'Reflect on how this past week\'s Weekly Avodah went.',
+    metrics: [
+      { id: 'metric_weekly_avodah_review_completed', name: 'Completed', metricType: 'boolean' },
+    ],
+  },
+  {
     id: 'practice_rosh_chodesh_past_month',
     domainId: 'domain_reflection',
     name: 'Monthly Reflection',
@@ -436,8 +454,10 @@ export const routinePractices = [
   ['rp_positivity', 'routine_core', 'practice_positivity', 'section_overall', 210, 0, null, null],
   ['rp_gratitude', 'routine_core', 'practice_gratitude', 'section_overall', 220, 0, null, null],
   ['rp_daily_avodah', 'routine_core', 'practice_daily_avodah', 'section_overall', 310, 0, null, null],
+  ['rp_daily_avodah_review', 'routine_core', 'practice_daily_avodah_review', 'section_overall', 315, 0, null, 'How did today\'s avodah go?'],
   ['rp_daily_thoughts', 'routine_core', 'practice_daily_thoughts', 'section_overall', 320, 0, null, null],
   ['rp_weekly_avodah', 'routine_shabbos', 'practice_weekly_avodah', 'section_overall', 310, 0, null, null],
+  ['rp_weekly_avodah_review', 'routine_shabbos', 'practice_weekly_avodah_review', 'section_overall', 315, 0, null, 'How did this week\'s avodah go?'],
   ['rp_weekly_reflection', 'routine_shabbos', 'practice_weekly_reflection', 'section_overall', 320, 0, null, null],
   [
     'rp_rosh_chodesh_past_month',

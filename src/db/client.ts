@@ -295,13 +295,21 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
   const targetDb = db ?? (await getDb());
   const reflectionDomain = domains.find(([id]) => id === 'domain_reflection');
   const reflectionPracticeIds = new Set([
+    'practice_daily_avodah_review',
     'practice_daily_thoughts',
+    'practice_weekly_avodah_review',
     'practice_weekly_reflection',
     'practice_rosh_chodesh_past_month',
   ]);
+  const noteEnabledPracticeIds = new Set([
+    'practice_daily_avodah_review',
+    'practice_weekly_avodah_review',
+  ]);
   const reflectionPractices = practices.filter((practice) => reflectionPracticeIds.has(practice.id));
   const reflectionRoutinePracticeIds = new Set([
+    'rp_daily_avodah_review',
     'rp_daily_thoughts',
+    'rp_weekly_avodah_review',
     'rp_weekly_reflection',
     'rp_rosh_chodesh_past_month',
   ]);
@@ -327,19 +335,22 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
     }
 
     for (const practice of reflectionPractices) {
+      const allowNote = noteEnabledPracticeIds.has(practice.id) ? 1 : 0;
       await targetDb.runAsync(
-        'INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, 0)',
+        'INSERT OR IGNORE INTO practices (id, user_id, domain_id, name, description, allow_note) VALUES (?, ?, ?, ?, ?, ?)',
         practice.id,
         LOCAL_USER_ID,
         practice.domainId,
         practice.name,
         practice.description ?? null,
+        allowNote,
       );
       await targetDb.runAsync(
-        'UPDATE practices SET domain_id = ?, name = ?, description = ?, allow_note = 0, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE practices SET domain_id = ?, name = ?, description = ?, allow_note = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         practice.domainId,
         practice.name,
         practice.description ?? null,
+        allowNote,
         practice.id,
       );
 

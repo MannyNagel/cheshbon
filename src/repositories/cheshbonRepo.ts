@@ -1368,7 +1368,7 @@ export async function createBlocker(input: { name: string; description?: string 
        SET enabled = 0,
         updated_at = CURRENT_TIMESTAMP
        WHERE blocker_id = ?
-        AND practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah', 'practice_daily_thoughts')`,
+        AND practice_id IN ('practice_gratitude', 'practice_daily_avodah', 'practice_weekly_avodah', 'practice_daily_avodah_review', 'practice_weekly_avodah_review', 'practice_daily_thoughts')`,
       id,
     );
   });
