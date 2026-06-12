@@ -32,15 +32,15 @@ export async function emailSelf(input: {
   return payload.to ?? 'your account email';
 }
 
-export async function emailRawDataToSelf(json: string) {
+export async function emailRawDataToSelf(markdown: string) {
   return emailSelf({
     subject: `Daily Cheshbon raw data export - ${new Date().toLocaleDateString()}`,
-    text: 'Your raw Daily Cheshbon data export is attached as JSON.',
+    text: 'Your readable Daily Cheshbon data export is attached.',
     attachments: [
       {
-        filename: `daily-cheshbon-raw-data-${new Date().toISOString().slice(0, 10)}.json`,
-        content: json,
-        contentType: 'application/json; charset=utf-8',
+        filename: `daily-cheshbon-readable-data-${new Date().toISOString().slice(0, 10)}.md`,
+        content: markdown,
+        contentType: 'text/markdown; charset=utf-8',
       },
     ],
   });
@@ -49,7 +49,7 @@ export async function emailRawDataToSelf(json: string) {
 export async function emailWeeklyReportToSelf(
   reportMarkdown: string,
   range: { weekStart: string; weekEnd?: string; reportThrough?: string },
-  weeklyDataJson: string,
+  weeklyDataMarkdown: string,
 ) {
   const end = range.reportThrough ?? range.weekEnd ?? range.weekStart;
   return emailSelf({
@@ -62,9 +62,9 @@ export async function emailWeeklyReportToSelf(
         contentType: 'text/markdown; charset=utf-8',
       },
       {
-        filename: `daily-cheshbon-weekly-data-${range.weekStart}-to-${end}.json`,
-        content: weeklyDataJson,
-        contentType: 'application/json; charset=utf-8',
+        filename: `daily-cheshbon-weekly-data-${range.weekStart}-to-${end}.md`,
+        content: weeklyDataMarkdown,
+        contentType: 'text/markdown; charset=utf-8',
       },
     ],
   });

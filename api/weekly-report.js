@@ -1,5 +1,5 @@
-const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
+const DEFAULT_MODEL = 'gpt-5.5';
 const MAX_PROMPT_CHARS = 18000;
 const TEXT_LIMIT = 180;
 
@@ -9,9 +9,9 @@ module.exports = async function handler(request, response) {
     return response.status(405).json({ error: 'Method not allowed.' });
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return response.status(500).json({ error: 'GROQ_API_KEY is not configured on the server.' });
+    return response.status(500).json({ error: 'OPENAI_API_KEY is not configured on the server.' });
   }
 
   try {
@@ -23,39 +23,31 @@ module.exports = async function handler(request, response) {
     const compactData = buildCompactReportData(data);
     const userPrompt = buildUserPrompt(compactData);
 
-    const completionResponse = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
+    const completionResponse = await fetch(OPENAI_RESPONSES_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.GROQ_WEEKLY_REPORT_MODEL || DEFAULT_MODEL,
-        temperature: 0.35,
-        max_completion_tokens: 3200,
-        messages: [
-          {
-            role: 'system',
-            content: buildSystemPrompt(),
-          },
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
+        model: process.env.OPENAI_WEEKLY_REPORT_MODEL || DEFAULT_MODEL,
+        reasoning: { effort: 'low' },
+        max_output_tokens: 3200,
+        instructions: buildSystemPrompt(),
+        input: userPrompt,
       }),
     });
 
     const payload = await completionResponse.json().catch(() => null);
     if (!completionResponse.ok) {
       return response.status(completionResponse.status).json({
-        error: payload?.error?.message || 'Groq report generation failed.',
+        error: payload?.error?.message || 'OpenAI report generation failed.',
       });
     }
 
-    const report = payload?.choices?.[0]?.message?.content;
+    const report = extractOutputText(payload);
     if (!report) {
-      return response.status(502).json({ error: 'Groq returned an empty report.' });
+      return response.status(502).json({ error: 'OpenAI returned an empty report.' });
     }
 
     return response.status(200).json({ report });
@@ -86,14 +78,128 @@ Use the data only. Mention sparse data when relevant. Keep the report useful and
 }
 
 function buildUserPrompt(data) {
-  let json = JSON.stringify(data);
-  if (json.length > MAX_PROMPT_CHARS) {
-    json = JSON.stringify(buildTinyReportData(data));
+  let brief = buildAnalysisBrief(data);
+  if (brief.length > MAX_PROMPT_CHARS) {
+    brief = buildAnalysisBrief(buildTinyReportData(data));
   }
-  if (json.length > MAX_PROMPT_CHARS) {
-    json = JSON.stringify(buildMinimalReportData(data));
+  if (brief.length > MAX_PROMPT_CHARS) {
+    brief = buildAnalysisBrief(buildMinimalReportData(data));
   }
-  return `Generate a weekly report from this compact Daily Cheshbon data. JSON:${json}`;
+  return brief;
+}
+
+function extractOutputText(payload) {
+  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+  const text = [];
+  for (const item of asArray(payload?.output)) {
+    for (const content of asArray(item?.content)) {
+      if (content?.type === 'output_text' && typeof content.text === 'string') {
+        text.push(content.text);
+      }
+    }
+  }
+  return text.join('\n').trim();
+}
+
+function buildAnalysisBrief(data) {
+  return [
+    'Generate a Daily Cheshbon weekly report from this curated analysis brief.',
+    '',
+    `Period: ${data.weekStart} to ${data.reportThrough || data.weekEnd}`,
+    `Previous comparison period: ${data.previousWeekLabel || 'not available'}`,
+    '',
+    'Domain signals:',
+    formatScoreLines(data.domains),
+    '',
+    'Practice signals:',
+    formatScoreLines(data.practices),
+    '',
+    'Daily reviews:',
+    formatDailyLines(data.daily),
+    '',
+    'Blockers:',
+    formatBlockerLines(data.blockers),
+    '',
+    'Notable practice entries and notes:',
+    formatEntryLines(data.notableEntries),
+  ].join('\n');
+}
+
+function formatScoreLines(items) {
+  const lines = asArray(items).map((item) => {
+    const parts = [
+      `- ${item.name || 'Unnamed'}`,
+      item.domain ? `domain=${item.domain}` : null,
+      item.avg == null ? null : `avg=${item.avg}/5`,
+      item.prev == null ? null : `prev=${item.prev}/5`,
+      item.delta == null ? null : `delta=${item.delta}`,
+      `entries=${item.entries ?? 0}`,
+      `done=${item.done ?? 0}`,
+      `partial=${item.partial ?? 0}`,
+      `missed=${item.missed ?? 0}`,
+      `text=${item.textEntries ?? 0}`,
+    ].filter(Boolean);
+    return parts.join('; ');
+  });
+  return lines.length ? lines.join('\n') : '- No score data.';
+}
+
+function formatDailyLines(days) {
+  const lines = asArray(days).map((day) => {
+    const pieces = [
+      `- ${day.date}`,
+      `completed=${day.completed ? 'yes' : 'no'}`,
+      day.avg == null ? null : `avg=${day.avg}/5`,
+      day.dayRating == null ? null : `day_rating=${day.dayRating}/5`,
+      formatList('wins', day.wins),
+      formatList('struggles', day.struggles),
+      formatList('patterns', day.patterns),
+      formatList('adjustments', day.adjustments),
+      formatList('notes', day.notes),
+      formatReflections(day.reflections),
+    ].filter(Boolean);
+    return pieces.join('; ');
+  });
+  return lines.length ? lines.join('\n') : '- No daily review data.';
+}
+
+function formatBlockerLines(blockers) {
+  const lines = asArray(blockers).map((blocker) => {
+    const practices = cleanList(blocker.practices, 6, 60).join(', ');
+    return `- ${blocker.name || 'Unnamed'}: ${blocker.count ?? 0}${practices ? `; practices=${practices}` : ''}`;
+  });
+  return lines.length ? lines.join('\n') : '- No blockers recorded.';
+}
+
+function formatEntryLines(entries) {
+  const lines = asArray(entries).map((entry) => {
+    const parts = [
+      `- ${entry.date}`,
+      entry.practice,
+      entry.domain ? `domain=${entry.domain}` : null,
+      entry.score == null ? null : `score=${entry.score}/5`,
+      entry.status ? `status=${entry.status}` : null,
+      entry.note ? `note="${entry.note}"` : null,
+      entry.text ? `text="${entry.text}"` : null,
+    ].filter(Boolean);
+    return parts.join('; ');
+  });
+  return lines.length ? lines.join('\n') : '- No notable entries.';
+}
+
+function formatList(label, values) {
+  const cleaned = cleanList(values, 3, TEXT_LIMIT);
+  return cleaned.length ? `${label}=${cleaned.join(' | ')}` : null;
+}
+
+function formatReflections(reflections) {
+  const cleaned = asArray(reflections)
+    .slice(0, 4)
+    .map((entry) => `${entry.practice || 'Reflection'}: ${entry.text || ''}`)
+    .filter((value) => value.trim());
+  return cleaned.length ? `reflections=${cleaned.join(' | ')}` : null;
 }
 
 function buildCompactReportData(data) {
@@ -131,7 +237,6 @@ function buildCompactReportData(data) {
   const notableEntries = selectNotableEntries(asArray(data.rawEntries));
 
   return {
-    generatedAt: data.generatedAt,
     weekStart: data.weekStart,
     weekEnd: data.weekEnd,
     reportThrough: data.reportThrough,
@@ -179,7 +284,6 @@ function buildTinyReportData(data) {
 
 function buildMinimalReportData(data) {
   return {
-    generatedAt: data.generatedAt,
     weekStart: data.weekStart,
     weekEnd: data.weekEnd,
     reportThrough: data.reportThrough,

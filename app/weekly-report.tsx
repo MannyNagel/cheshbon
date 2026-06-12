@@ -7,6 +7,7 @@ import { colors, spacing } from '@/src/components/ui';
 import { emailWeeklyReportToSelf } from '@/src/services/emailService';
 import {
   exportWeeklyReportMarkdown,
+  formatWeeklyReportData,
   generateWeeklyReport,
   getActiveWeeklyReportPeriod,
   getSavedWeeklyReports,
@@ -101,7 +102,7 @@ export default function WeeklyReportScreen() {
       const recipient = await emailWeeklyReportToSelf(
         report,
         range,
-        JSON.stringify({ exportedAt: new Date().toISOString(), weeklyData }, null, 2),
+        formatWeeklyReportData(weeklyData),
       );
       setMessage(`Weekly report and weekly data emailed to ${recipient}.`);
     } catch (error) {

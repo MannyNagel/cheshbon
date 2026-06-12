@@ -8,7 +8,7 @@ import {
   deactivateDomain,
   createBlocker,
   createDomain,
-  exportAllData,
+  exportReadableData,
   getBlockerEditorRows,
   getDomainEditorRows,
   getReminderPreferences,
@@ -146,7 +146,7 @@ export default function SettingsScreen() {
     setBusy(true);
     setMessage(null);
     try {
-      const recipient = await emailRawDataToSelf(await exportAllData());
+      const recipient = await emailRawDataToSelf(await exportReadableData());
       setMessage(`Raw data emailed to ${recipient}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not email raw data.');

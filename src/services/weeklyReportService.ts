@@ -285,6 +285,120 @@ export async function exportWeeklyReportMarkdown(report: string, data: { weekSta
   }
 }
 
+export function formatWeeklyReportData(data: WeeklyReportData) {
+  const lines: string[] = [
+    '# Daily Cheshbon Weekly Data',
+    '',
+    `Period: ${data.weekStart} to ${data.reportThrough}`,
+    `Full week: ${data.weekStart} to ${data.weekEnd}`,
+    `Previous comparison: ${data.previousWeekLabel}`,
+    '',
+    '## Domain Summary',
+    ...formatScoreSummaryRows(data.domains),
+    '',
+    '## Practice Summary',
+    ...formatPracticeSummaryRows(data.practices),
+    '',
+    '## Daily Reviews',
+    ...data.daily.flatMap(formatDailyReview),
+    '',
+    '## Blockers',
+    ...formatBlockerRows(data.blockers),
+    '',
+    '## Practice Entries',
+    ...formatEntryRows(data.rawEntries),
+    '',
+  ];
+  return lines.join('\n');
+}
+
+function formatScoreSummaryRows(rows: WeeklyReportData['domains']) {
+  if (!rows.length) return ['No domain data.'];
+  return rows.map((row) =>
+    [
+      `- ${row.name}`,
+      row.average == null ? 'average: n/a' : `average: ${row.average}/5`,
+      row.previousAverage == null ? null : `previous: ${row.previousAverage}/5`,
+      row.delta == null ? null : `change: ${row.delta}`,
+      `entries: ${row.entries}`,
+      `done: ${row.done}`,
+      `partial: ${row.partial}`,
+      `missed: ${row.missed}`,
+      `text entries: ${row.textEntries}`,
+    ].filter(Boolean).join('; '),
+  );
+}
+
+function formatPracticeSummaryRows(rows: WeeklyReportData['practices']) {
+  if (!rows.length) return ['No practice data.'];
+  return rows.map((row) =>
+    [
+      `- ${row.name}`,
+      `domain: ${row.domainName}`,
+      row.average == null ? 'average: n/a' : `average: ${row.average}/5`,
+      row.previousAverage == null ? null : `previous: ${row.previousAverage}/5`,
+      row.delta == null ? null : `change: ${row.delta}`,
+      `entries: ${row.entries}`,
+      `done: ${row.done}`,
+      `partial: ${row.partial}`,
+      `missed: ${row.missed}`,
+      `text entries: ${row.textEntries}`,
+    ].filter(Boolean).join('; '),
+  );
+}
+
+function formatDailyReview(day: WeeklyReportData['daily'][number]) {
+  const lines = [
+    `### ${day.date} (${day.label})`,
+    `Completed: ${day.completed ? 'yes' : 'no'}`,
+    `Average: ${day.average == null ? 'n/a' : `${day.average}/5`}`,
+    `Day rating: ${day.generalDayRating == null ? 'n/a' : `${day.generalDayRating}/5`}`,
+    ...formatTextList('Wins', day.wins),
+    ...formatTextList('Struggles', day.struggles),
+    ...formatTextList('Patterns noticed', day.patterns),
+    ...formatTextList('Adjustments for tomorrow', day.adjustments),
+    ...formatTextList('Notes', day.notes),
+  ];
+  if (day.textReflections.length) {
+    lines.push('Text reflections:');
+    for (const reflection of day.textReflections) {
+      lines.push(`- ${reflection.practiceName} (${reflection.domainName}): ${reflection.text}`);
+    }
+  }
+  return [...lines, ''];
+}
+
+function formatBlockerRows(rows: WeeklyReportData['blockers']) {
+  if (!rows.length) return ['No blockers recorded.'];
+  return rows.map((row) => {
+    const practices = row.practices.length ? `; practices: ${row.practices.join(', ')}` : '';
+    const domains = row.domains.length ? `; domains: ${row.domains.join(', ')}` : '';
+    return `- ${row.blockerName}: ${row.count}${practices}${domains}`;
+  });
+}
+
+function formatEntryRows(rows: WeeklyReportData['rawEntries']) {
+  if (!rows.length) return ['No practice entries recorded.'];
+  return rows.map((row) =>
+    [
+      `- ${row.date}`,
+      row.practiceName,
+      `domain: ${row.domainName}`,
+      row.metricName ? `metric: ${row.metricName}` : null,
+      row.metricType ? `type: ${row.metricType}` : null,
+      row.status ? `status: ${row.status}` : null,
+      row.score == null ? null : `score: ${row.score}/5`,
+      row.note ? `note: ${row.note}` : null,
+      row.text ? `text: ${row.text}` : null,
+    ].filter(Boolean).join('; '),
+  );
+}
+
+function formatTextList(label: string, values: string[]) {
+  if (!values.length) return [];
+  return [`${label}:`, ...values.map((value) => `- ${value}`)];
+}
+
 function latestReportRollover(now: Date) {
   const rollover = new Date(now);
   rollover.setHours(12, 0, 0, 0);

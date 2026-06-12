@@ -1416,6 +1416,302 @@ export async function exportAllData() {
   return JSON.stringify({ exportedAt: new Date().toISOString(), tables: payload }, null, 2);
 }
 
+export async function exportReadableData() {
+  const db = await getDb();
+  const [domains, blockers, practices, routines, sessions, entries, weeklyReports] = await Promise.all([
+    db.getAllAsync<{ name: string; description: string | null; active: number }>(
+      'SELECT name, description, active FROM domains ORDER BY sort_order, name',
+    ),
+    db.getAllAsync<{ name: string; description: string | null; active: number }>(
+      'SELECT name, description, active FROM blockers ORDER BY name',
+    ),
+    db.getAllAsync<{
+      name: string;
+      description: string | null;
+      domain_name: string;
+      allow_note: number;
+      markable: number;
+      weekly_target: number | null;
+      active: number;
+      metrics: string | null;
+    }>(
+      `SELECT p.name,
+        p.description,
+        d.name as domain_name,
+        p.allow_note,
+        p.markable,
+        p.weekly_target,
+        p.active,
+        GROUP_CONCAT(m.name || ' (' || m.metric_type || ')', ', ') as metrics
+       FROM practices p
+       JOIN domains d ON d.id = p.domain_id
+       LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+       GROUP BY p.id
+       ORDER BY d.sort_order, p.name`,
+    ),
+    db.getAllAsync<{
+      routine_name: string;
+      practice_name: string;
+      section_name: string;
+      enabled: number;
+      active: number;
+    }>(
+      `SELECT rt.name as routine_name,
+        p.name as practice_name,
+        rs.name as section_name,
+        rp.enabled,
+        rt.active
+       FROM routine_practices rp
+       JOIN routine_templates rt ON rt.id = rp.routine_template_id
+       JOIN practices p ON p.id = rp.practice_id
+       JOIN review_sections rs ON rs.id = rp.review_section_id
+       WHERE rp.archived_from IS NULL
+       ORDER BY rt.priority, rt.name, rs.sort_order, rp.sort_order, p.name`,
+    ),
+    db.getAllAsync<{
+      review_date: string;
+      bed_time: string | null;
+      wake_time: string | null;
+      general_day_rating: number | null;
+      main_win: string | null;
+      main_struggle: string | null;
+      pattern_noticed: string | null;
+      adjustment_for_tomorrow: string | null;
+      note: string | null;
+      completed_at: string | null;
+    }>(
+      `SELECT review_date,
+        bed_time,
+        wake_time,
+        general_day_rating,
+        main_win,
+        main_struggle,
+        pattern_noticed,
+        adjustment_for_tomorrow,
+        note,
+        completed_at
+       FROM daily_review_sessions
+       ORDER BY review_date DESC`,
+    ),
+    db.getAllAsync<{
+      entry_date: string;
+      practice_name: string;
+      domain_name: string;
+      status: string | null;
+      note: string | null;
+      metric_name: string | null;
+      metric_type: string | null;
+      value_boolean: number | null;
+      value_number: number | null;
+      value_text: string | null;
+      blockers: string | null;
+    }>(
+      `SELECT de.entry_date,
+        p.name as practice_name,
+        d.name as domain_name,
+        de.status,
+        de.note,
+        m.name as metric_name,
+        m.metric_type,
+        emv.value_boolean,
+        emv.value_number,
+        emv.value_text,
+        (
+          SELECT GROUP_CONCAT(b.name, ', ')
+          FROM entry_blockers eb
+          JOIN blockers b ON b.id = eb.blocker_id
+          WHERE eb.entry_id = de.id
+        ) as blockers
+       FROM daily_entries de
+       JOIN practices p ON p.id = de.practice_id
+       JOIN domains d ON d.id = p.domain_id
+       LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+       LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
+       ORDER BY de.entry_date DESC, d.sort_order, p.name, m.sort_order`,
+    ),
+    db.getAllAsync<{ week_start_date: string; week_end_date: string; generated_at: string; report_markdown: string }>(
+      `SELECT week_start_date,
+        week_end_date,
+        generated_at,
+        report_markdown
+       FROM weekly_reports
+       ORDER BY week_start_date DESC`,
+    ),
+  ]);
+
+  return [
+    '# Daily Cheshbon Data Export',
+    '',
+    `Exported: ${new Date().toLocaleString()}`,
+    '',
+    '## Domains',
+    ...formatNamedRows(domains),
+    '',
+    '## Blockers',
+    ...formatNamedRows(blockers),
+    '',
+    '## Practices',
+    ...formatPracticeExportRows(practices),
+    '',
+    '## Routines',
+    ...formatRoutineExportRows(routines),
+    '',
+    '## Daily Reviews',
+    ...formatSessionExportRows(sessions),
+    '',
+    '## Practice Entries',
+    ...formatReadableEntryRows(entries),
+    '',
+    '## Weekly Reports',
+    ...formatSavedReportRows(weeklyReports),
+    '',
+  ].join('\n');
+}
+
+function formatNamedRows(rows: Array<{ name: string; description: string | null; active: number }>) {
+  if (!rows.length) return ['None.'];
+  return rows.map((row) =>
+    [`- ${row.name}`, row.active ? null : 'inactive', row.description ? `description: ${row.description}` : null]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function formatPracticeExportRows(
+  rows: Array<{
+    name: string;
+    description: string | null;
+    domain_name: string;
+    allow_note: number;
+    markable: number;
+    weekly_target: number | null;
+    active: number;
+    metrics: string | null;
+  }>,
+) {
+  if (!rows.length) return ['No practices.'];
+  return rows.map((row) =>
+    [
+      `- ${row.name}`,
+      `domain: ${row.domain_name}`,
+      row.active ? null : 'inactive',
+      row.metrics ? `metrics: ${row.metrics}` : null,
+      `notes: ${row.allow_note ? 'allowed' : 'off'}`,
+      `markable: ${row.markable ? 'yes' : 'no'}`,
+      row.weekly_target ? `weekly target: ${row.weekly_target}` : null,
+      row.description ? `description: ${row.description}` : null,
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function formatRoutineExportRows(
+  rows: Array<{ routine_name: string; practice_name: string; section_name: string; enabled: number; active: number }>,
+) {
+  if (!rows.length) return ['No routines.'];
+  const grouped = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = `${row.routine_name}${row.active ? '' : ' (inactive)'}`;
+    const list = grouped.get(key) ?? [];
+    list.push(row);
+    grouped.set(key, list);
+  }
+  const lines: string[] = [];
+  for (const [routineName, routineRows] of grouped) {
+    lines.push(`### ${routineName}`);
+    for (const row of routineRows) {
+      lines.push(`- ${row.section_name}: ${row.practice_name}${row.enabled ? '' : ' (disabled)'}`);
+    }
+    lines.push('');
+  }
+  return lines;
+}
+
+function formatSessionExportRows(
+  rows: Array<{
+    review_date: string;
+    bed_time: string | null;
+    wake_time: string | null;
+    general_day_rating: number | null;
+    main_win: string | null;
+    main_struggle: string | null;
+    pattern_noticed: string | null;
+    adjustment_for_tomorrow: string | null;
+    note: string | null;
+    completed_at: string | null;
+  }>,
+) {
+  if (!rows.length) return ['No daily reviews.'];
+  return rows.flatMap((row) => [
+    `### ${row.review_date}`,
+    `Completed: ${row.completed_at ? 'yes' : 'no'}`,
+    `Sleep: ${row.bed_time || 'n/a'} to ${row.wake_time || 'n/a'}`,
+    `Day rating: ${row.general_day_rating == null ? 'n/a' : `${row.general_day_rating}/5`}`,
+    ...formatOptionalLine('Win', row.main_win),
+    ...formatOptionalLine('Struggle', row.main_struggle),
+    ...formatOptionalLine('Pattern noticed', row.pattern_noticed),
+    ...formatOptionalLine('Adjustment for tomorrow', row.adjustment_for_tomorrow),
+    ...formatOptionalLine('Note', row.note),
+    '',
+  ]);
+}
+
+function formatReadableEntryRows(
+  rows: Array<{
+    entry_date: string;
+    practice_name: string;
+    domain_name: string;
+    status: string | null;
+    note: string | null;
+    metric_name: string | null;
+    metric_type: string | null;
+    value_boolean: number | null;
+    value_number: number | null;
+    value_text: string | null;
+    blockers: string | null;
+  }>,
+) {
+  if (!rows.length) return ['No practice entries.'];
+  return rows.map((row) =>
+    [
+      `- ${row.entry_date}`,
+      row.practice_name,
+      `domain: ${row.domain_name}`,
+      row.metric_name ? `metric: ${row.metric_name}` : null,
+      row.metric_type ? `type: ${row.metric_type}` : null,
+      row.status ? `status: ${row.status}` : null,
+      formatMetricValue(row),
+      row.blockers ? `blockers: ${row.blockers}` : null,
+      row.note ? `note: ${row.note}` : null,
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function formatSavedReportRows(rows: Array<{ week_start_date: string; week_end_date: string; generated_at: string; report_markdown: string }>) {
+  if (!rows.length) return ['No weekly reports.'];
+  return rows.flatMap((row) => [
+    `### ${row.week_start_date} to ${row.week_end_date}`,
+    `Generated: ${new Date(row.generated_at).toLocaleString()}`,
+    '',
+    row.report_markdown,
+    '',
+  ]);
+}
+
+function formatMetricValue(row: { metric_type: string | null; value_boolean: number | null; value_number: number | null; value_text: string | null }) {
+  if (row.metric_type === 'boolean' && row.value_boolean != null) return `value: ${row.value_boolean ? 'yes' : 'no'}`;
+  if ((row.metric_type === 'scale' || row.metric_type === 'number') && row.value_number != null) return `value: ${row.value_number}`;
+  if (row.metric_type === 'text' && row.value_text) return `text: ${row.value_text}`;
+  return null;
+}
+
+function formatOptionalLine(label: string, value: string | null) {
+  return value?.trim() ? [`${label}: ${value.trim()}`] : [];
+}
+
 export async function importAllData(exportJson: string) {
   const parsed = JSON.parse(exportJson) as { tables?: Record<string, Record<string, unknown>[]> };
   if (!parsed.tables) {
