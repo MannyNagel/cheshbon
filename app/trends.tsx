@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, Search, X } from 'lucide-react-native';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, Search, Sparkles, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -6,16 +6,19 @@ import type { DimensionValue } from 'react-native';
 
 import { TrendPracticeCard } from '@/src/components/TrendPracticeCard';
 import { colors, spacing } from '@/src/components/ui';
-import type { TrendSummary, TrendWeekMode } from '@/src/models/types';
+import type { QualitativeTrendSummary, TrendSummary, TrendWeekMode } from '@/src/models/types';
 import { updateTrendPreferences } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
-import { getTrendSummary } from '@/src/services/trendsService';
+import { getQualitativeTrendSummary, getTrendSummary } from '@/src/services/trendsService';
 
 type SortBy = 'domain' | 'name' | 'kind';
 type KindFilter = 'all' | TrendSummary['practiceTrends'][number]['metricKind'];
+type TrendMode = 'qualitative' | 'quantitative';
 
 export default function TrendsScreen() {
   const [summary, setSummary] = useState<TrendSummary | null>(null);
+  const [qualitativeSummary, setQualitativeSummary] = useState<QualitativeTrendSummary | null>(null);
+  const [mode, setMode] = useState<TrendMode>('qualitative');
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('domain');
   const [domainFilter, setDomainFilter] = useState<string>('all');
@@ -24,7 +27,10 @@ export default function TrendsScreen() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    getTrendSummary().then(setSummary);
+    Promise.all([getTrendSummary(), getQualitativeTrendSummary()]).then(([nextSummary, nextQualitativeSummary]) => {
+      setSummary(nextSummary);
+      setQualitativeSummary(nextQualitativeSummary);
+    });
   }, []);
 
   const filteredPractices = useMemo(() => {
@@ -83,7 +89,7 @@ export default function TrendsScreen() {
     }
   }
 
-  if (!summary) {
+  if (!summary || !qualitativeSummary) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -96,9 +102,17 @@ export default function TrendsScreen() {
       <View style={styles.header}>
         <Text style={styles.eyebrow}>Metrics</Text>
         <Text style={styles.title}>Trends</Text>
-        <Text style={styles.subtitle}>See how you practices are developing over time.</Text>
+        <Text style={styles.subtitle}>Notice how your practices are developing over time.</Text>
+        <View style={styles.modeToggle}>
+          <ModeButton label="Qualitative" selected={mode === 'qualitative'} onPress={() => setMode('qualitative')} />
+          <ModeButton label="Quantitative" selected={mode === 'quantitative'} onPress={() => setMode('quantitative')} />
+        </View>
       </View>
 
+      {mode === 'qualitative' ? (
+        <QualitativeTrends summary={qualitativeSummary} />
+      ) : (
+        <>
       <Section title="Week Range">
         <View style={styles.filterPanel}>
           <Text style={styles.rowMeta}>Choose how weekly trend scores are calculated.</Text>
@@ -227,7 +241,126 @@ export default function TrendsScreen() {
           <Empty text="Blockers will show up once selected in reviews." />
         )}
       </Section>
+        </>
+      )}
     </ScrollView>
+  );
+}
+
+function ModeButton({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={[styles.modeButton, selected && styles.modeButtonSelected]}>
+      <Text style={[styles.modeButtonText, selected && styles.modeButtonTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function QualitativeTrends({ summary }: { summary: QualitativeTrendSummary }) {
+  return (
+    <>
+      <View style={styles.qualitativeIntro}>
+        <View style={styles.sparkleCircle}>
+          <Sparkles color={colors.green} size={19} />
+        </View>
+        <View style={styles.qualitativeIntroText}>
+          <Text style={styles.rowTitle}>A gentler read of the last month</Text>
+          <Text style={styles.rowMeta}>
+            This view looks for areas of steadiness, areas asking for more care, recurring blockers, and recent words you wrote.
+          </Text>
+          <Text style={styles.rowMeta}>Looking at {summary.rangeLabel}.</Text>
+        </View>
+      </View>
+
+      <Section title="Areas Of Strength">
+        {summary.succeeding.length ? (
+          <View style={styles.insightGrid}>
+            {summary.succeeding.map((item) => (
+              <InsightCard key={item.domainId} tone="green" title={item.domainName} message={item.message} chips={item.practices} />
+            ))}
+          </View>
+        ) : (
+          <Empty text="As more reviews come in, areas of steadiness will appear here." />
+        )}
+      </Section>
+
+      <Section title="Areas Asking For Attention">
+        {summary.needsAttention.length ? (
+          <View style={styles.insightGrid}>
+            {summary.needsAttention.map((item) => (
+              <InsightCard
+                key={item.domainId}
+                tone="amber"
+                title={item.domainName}
+                message={item.message}
+                chips={[...item.practices, ...item.blockers.map((blocker) => `Blocker: ${blocker}`)]}
+              />
+            ))}
+          </View>
+        ) : (
+          <Empty text="No clear attention pattern is showing yet. That can simply mean the data is still young." />
+        )}
+      </Section>
+
+      <Section title="Recurring Blockers">
+        {summary.blockerPatterns.length ? (
+          <View style={styles.insightGrid}>
+            {summary.blockerPatterns.map((item) => (
+              <InsightCard
+                key={item.blockerName}
+                tone="rose"
+                title={item.blockerName}
+                message={`This blocker has been showing up around ${joinList(item.domainNames)}.`}
+                chips={item.practiceNames}
+              />
+            ))}
+          </View>
+        ) : (
+          <Empty text="Blocker patterns will appear here once blockers repeat across reviews." />
+        )}
+      </Section>
+
+      <Section title="Recent Notes Worth Revisiting">
+        {summary.recentNotes.length ? (
+          <View style={styles.noteList}>
+            {summary.recentNotes.map((entry) => (
+              <View key={`${entry.date}-${entry.practiceName}-${entry.text}`} style={styles.noteCard}>
+                <Text style={styles.noteMeta}>{entry.date} | {entry.domainName} | {entry.practiceName}</Text>
+                <Text style={styles.noteText}>{entry.text}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Empty text="Notes and text reflections will collect here as you write them." />
+        )}
+      </Section>
+    </>
+  );
+}
+
+function InsightCard({
+  title,
+  message,
+  chips,
+  tone,
+}: {
+  title: string;
+  message: string;
+  chips: string[];
+  tone: 'green' | 'amber' | 'rose';
+}) {
+  const toneStyle = tone === 'green' ? styles.insightGreen : tone === 'amber' ? styles.insightAmber : styles.insightRose;
+  return (
+    <View style={[styles.insightCard, toneStyle]}>
+      <Text style={styles.insightTitle}>{title}</Text>
+      <Text style={styles.insightMessage}>{message}</Text>
+      {chips.length ? (
+        <View style={styles.insightChipWrap}>
+          {chips.slice(0, 5).map((chip) => (
+            <Text key={chip} style={styles.insightChip}>{chip}</Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -285,6 +418,13 @@ function kindLabel(kind: TrendSummary['practiceTrends'][number]['metricKind']) {
   if (kind === 'number') return 'number';
   if (kind === 'text') return 'text';
   return 'quality';
+}
+
+function joinList(values: string[]) {
+  if (values.length === 0) return 'several places';
+  if (values.length === 1) return values[0];
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(', ')}, and ${values[values.length - 1]}`;
 }
 
 const styles = StyleSheet.create({
@@ -427,6 +567,114 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'left',
   },
+  modeButton: {
+    alignItems: 'center',
+    borderRadius: 8,
+    flex: 1,
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  modeButtonSelected: {
+    backgroundColor: colors.surface,
+    borderColor: colors.green,
+    borderWidth: 1,
+  },
+  modeButtonText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  modeButtonTextSelected: {
+    color: colors.green,
+  },
+  modeToggle: {
+    backgroundColor: colors.softLine,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    maxWidth: 420,
+    padding: spacing.xs,
+  },
+  insightAmber: {
+    backgroundColor: colors.amberSoft,
+    borderColor: '#F3C66B',
+  },
+  insightCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    gap: spacing.md,
+    minWidth: 240,
+    padding: spacing.lg,
+  },
+  insightChip: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    textAlign: 'left',
+  },
+  insightChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  insightGreen: {
+    backgroundColor: colors.greenSoft,
+    borderColor: '#AADBC8',
+  },
+  insightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  insightMessage: {
+    color: colors.ink,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'left',
+  },
+  insightRose: {
+    backgroundColor: colors.roseSoft,
+    borderColor: '#F5B5B0',
+  },
+  insightTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  noteCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  noteList: {
+    gap: spacing.md,
+  },
+  noteMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'left',
+  },
+  noteText: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
   practiceChip: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
@@ -462,6 +710,20 @@ const styles = StyleSheet.create({
   },
   practiceList: {
     gap: spacing.md,
+  },
+  qualitativeIntro: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  qualitativeIntroText: {
+    flex: 1,
+    gap: spacing.xs,
   },
   resetButton: {
     alignSelf: 'flex-start',
@@ -534,6 +796,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
+  },
+  sparkleCircle: {
+    alignItems: 'center',
+    backgroundColor: colors.greenSoft,
+    borderRadius: 8,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
   },
   section: {
     gap: spacing.md,

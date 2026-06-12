@@ -1,5 +1,5 @@
 import { getDb } from '@/src/db/client';
-import type { MetricType, TrendSummary, TrendWeekMode, TrendWindow } from '@/src/models/types';
+import type { MetricType, QualitativeTrendSummary, TrendSummary, TrendWeekMode, TrendWindow } from '@/src/models/types';
 import { getTrendPreferences } from '@/src/repositories/cheshbonRepo';
 import { addDaysIso, dayOfWeek, daysAgoIso, shortDayName, todayIsoDate } from '@/src/utils/dates';
 
@@ -25,6 +25,27 @@ type ScoreValue = {
 type NumericValue = { date: string; value: number };
 type TextValue = { date: string; text: string };
 type WeekWindow = { mode: TrendWeekMode; label: string; start: string; end: string };
+
+type QualitativeEntryRow = {
+  entry_id: string;
+  entry_date: string;
+  practice_id: string;
+  practice_name: string;
+  domain_id: string;
+  domain_name: string;
+  status: string | null;
+  note: string | null;
+  metric_type: MetricType | null;
+  value_boolean: number | null;
+  value_number: number | null;
+  value_text: string | null;
+};
+
+type QualitativeBlockerRow = {
+  blocker_name: string;
+  practice_name: string;
+  domain_name: string;
+};
 
 export async function getTrendSummary(): Promise<TrendSummary> {
   const db = await getDb();
@@ -101,6 +122,142 @@ export async function getTrendSummary(): Promise<TrendSummary> {
       blockerName: row.blocker_name,
       count: row.count,
     })),
+  };
+}
+
+export async function getQualitativeTrendSummary(): Promise<QualitativeTrendSummary> {
+  const db = await getDb();
+  const startDate = daysAgoIso(29);
+  const today = todayIsoDate();
+  const [rows, blockerRows] = await Promise.all([
+    db.getAllAsync<QualitativeEntryRow>(
+      `SELECT
+        de.id as entry_id,
+        de.entry_date,
+        p.id as practice_id,
+        p.name as practice_name,
+        d.id as domain_id,
+        d.name as domain_name,
+        de.status,
+        de.note,
+        m.metric_type,
+        emv.value_boolean,
+        emv.value_number,
+        emv.value_text
+       FROM daily_entries de
+       JOIN practices p ON p.id = de.practice_id
+       JOIN domains d ON d.id = p.domain_id
+       LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+       LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
+       WHERE de.entry_date >= ?
+        AND de.entry_date <= ?
+        AND p.active = 1
+        AND d.active = 1
+        AND EXISTS (
+          SELECT 1
+          FROM routine_practices rp
+          WHERE rp.practice_id = p.id
+           AND rp.archived_from IS NULL
+        )
+       ORDER BY de.entry_date DESC`,
+      startDate,
+      today,
+    ),
+    db.getAllAsync<QualitativeBlockerRow>(
+      `SELECT b.name as blocker_name,
+        p.name as practice_name,
+        d.name as domain_name
+       FROM entry_blockers eb
+       JOIN blockers b ON b.id = eb.blocker_id
+       JOIN daily_entries de ON de.id = eb.entry_id
+       JOIN practices p ON p.id = de.practice_id
+       JOIN domains d ON d.id = p.domain_id
+       WHERE de.entry_date >= ?
+        AND de.entry_date <= ?
+        AND p.active = 1
+        AND d.active = 1
+        AND EXISTS (
+          SELECT 1
+          FROM routine_practices rp
+          WHERE rp.practice_id = p.id
+           AND rp.archived_from IS NULL
+        )
+       ORDER BY de.entry_date DESC`,
+      startDate,
+      today,
+    ),
+  ]);
+
+  const domainMap = new Map<string, {
+    domainId: string;
+    domainName: string;
+    practiceNames: Set<string>;
+    qualityValues: number[];
+    booleanValues: number[];
+    statusValues: number[];
+    noteCount: number;
+    blockerNames: string[];
+  }>();
+  const notesByKey = new Map<string, QualitativeTrendSummary['recentNotes'][number]>();
+  const countedNoteKeys = new Set<string>();
+
+  for (const row of rows) {
+    const domain = domainMap.get(row.domain_id) ?? {
+      domainId: row.domain_id,
+      domainName: row.domain_name,
+      practiceNames: new Set<string>(),
+      qualityValues: [],
+      booleanValues: [],
+      statusValues: [],
+      noteCount: 0,
+      blockerNames: [],
+    };
+    domain.practiceNames.add(row.practice_name);
+    if (row.metric_type === 'scale' && row.value_number != null) domain.qualityValues.push(row.value_number);
+    if (row.metric_type === 'boolean' && row.value_boolean != null) domain.booleanValues.push(row.value_boolean);
+    if (row.status === 'done' || row.status === 'partial' || row.status === 'missed') {
+      domain.statusValues.push(row.status === 'done' ? 1 : row.status === 'partial' ? 0.5 : 0);
+    }
+
+    const text = firstNonEmpty(row.value_text, row.note);
+    if (text) {
+      const noteKey = `${row.entry_id}-${text}`;
+      if (!countedNoteKeys.has(noteKey)) {
+        domain.noteCount += 1;
+        countedNoteKeys.add(noteKey);
+      }
+      notesByKey.set(noteKey, {
+        date: row.entry_date,
+        practiceName: row.practice_name,
+        domainName: row.domain_name,
+        text,
+      });
+    }
+    domainMap.set(row.domain_id, domain);
+  }
+
+  for (const row of blockerRows) {
+    for (const domain of domainMap.values()) {
+      if (domain.domainName === row.domain_name) domain.blockerNames.push(row.blocker_name);
+    }
+  }
+
+  const domains = [...domainMap.values()];
+  const succeeding = domains
+    .map((domain) => buildSuccessInsight(domain))
+    .filter((item): item is QualitativeTrendSummary['succeeding'][number] => item != null)
+    .slice(0, 4);
+  const needsAttention = domains
+    .map((domain) => buildAttentionInsight(domain))
+    .filter((item): item is QualitativeTrendSummary['needsAttention'][number] => item != null)
+    .slice(0, 4);
+
+  return {
+    rangeLabel: `${startDate} through ${today}`,
+    succeeding,
+    needsAttention,
+    recentNotes: [...notesByKey.values()].slice(0, 10),
+    blockerPatterns: buildBlockerPatterns(blockerRows),
   };
 }
 
@@ -449,6 +606,129 @@ function buildMonthPoints(values: NumericValue[], percent: boolean) {
 
 function emptyTrendWindow(): TrendWindow {
   return { average: null, sampleSize: 0, points: [] };
+}
+
+function buildSuccessInsight(domain: {
+  domainId: string;
+  domainName: string;
+  practiceNames: Set<string>;
+  qualityValues: number[];
+  booleanValues: number[];
+  statusValues: number[];
+  noteCount: number;
+}) {
+  const quality = average(domain.qualityValues);
+  const completion = average(domain.booleanValues.length ? domain.booleanValues : domain.statusValues);
+  const practices = [...domain.practiceNames].slice(0, 3);
+  if (quality != null && quality >= 4) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'This area has had a steady feel recently. The quality entries suggest real consistency, not just motion.',
+      practices,
+    };
+  }
+  if (completion != null && completion >= 0.75) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'There has been reliable follow-through here. This may be an area where the current structure is supporting you well.',
+      practices,
+    };
+  }
+  if (domain.noteCount >= 3) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'You have been paying attention here in writing. That kind of noticing is itself a meaningful strength.',
+      practices,
+    };
+  }
+  return null;
+}
+
+function buildAttentionInsight(domain: {
+  domainId: string;
+  domainName: string;
+  practiceNames: Set<string>;
+  qualityValues: number[];
+  booleanValues: number[];
+  statusValues: number[];
+  blockerNames: string[];
+}) {
+  const quality = average(domain.qualityValues);
+  const completion = average(domain.booleanValues.length ? domain.booleanValues : domain.statusValues);
+  const blockers = mostCommon(domain.blockerNames, 3);
+  const practices = [...domain.practiceNames].slice(0, 3);
+  if (blockers.length >= 2) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'A few blockers are repeating here. This may be worth approaching gently, by changing the setup around the practice rather than pushing harder.',
+      practices,
+      blockers,
+    };
+  }
+  if (quality != null && quality <= 3 && domain.qualityValues.length >= 3) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'The recent quality entries suggest this area may need more care or a smaller next step.',
+      practices,
+      blockers,
+    };
+  }
+  if (completion != null && completion <= 0.5 && (domain.booleanValues.length + domain.statusValues.length) >= 3) {
+    return {
+      domainId: domain.domainId,
+      domainName: domain.domainName,
+      message: 'Follow-through has been uneven here. It may help to make the practice easier to begin or more clearly tied to a routine.',
+      practices,
+      blockers,
+    };
+  }
+  return null;
+}
+
+function buildBlockerPatterns(rows: QualitativeBlockerRow[]): QualitativeTrendSummary['blockerPatterns'] {
+  const byBlocker = new Map<string, { blockerName: string; domainNames: string[]; practiceNames: string[] }>();
+  for (const row of rows) {
+    const item = byBlocker.get(row.blocker_name) ?? {
+      blockerName: row.blocker_name,
+      domainNames: [],
+      practiceNames: [],
+    };
+    item.domainNames.push(row.domain_name);
+    item.practiceNames.push(row.practice_name);
+    byBlocker.set(row.blocker_name, item);
+  }
+  return [...byBlocker.values()]
+    .sort((a, b) => b.practiceNames.length - a.practiceNames.length || a.blockerName.localeCompare(b.blockerName))
+    .slice(0, 5)
+    .map((item) => ({
+      blockerName: item.blockerName,
+      domainNames: mostCommon(item.domainNames, 3),
+      practiceNames: mostCommon(item.practiceNames, 3),
+    }));
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function mostCommon(values: string[], limit: number) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([value]) => value);
 }
 
 function scaleCompletion(rate: number) {

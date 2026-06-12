@@ -159,6 +159,34 @@ export type TrendSummary = {
   }>;
 };
 
+export type QualitativeTrendSummary = {
+  rangeLabel: string;
+  succeeding: Array<{
+    domainId: string;
+    domainName: string;
+    message: string;
+    practices: string[];
+  }>;
+  needsAttention: Array<{
+    domainId: string;
+    domainName: string;
+    message: string;
+    practices: string[];
+    blockers: string[];
+  }>;
+  recentNotes: Array<{
+    date: string;
+    practiceName: string;
+    domainName: string;
+    text: string;
+  }>;
+  blockerPatterns: Array<{
+    blockerName: string;
+    domainNames: string[];
+    practiceNames: string[];
+  }>;
+};
+
 export type TrendPoint = {
   label: string;
   value: number | null;
