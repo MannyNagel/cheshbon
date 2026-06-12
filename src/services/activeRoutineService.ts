@@ -49,6 +49,11 @@ type ReviewItemRow = {
   required: number;
 };
 
+type AvodahContextRow = {
+  entry_date: string;
+  text: string | null;
+};
+
 export async function getActiveRoutinesForDate(reviewDate: string): Promise<RoutineTemplate[]> {
   const db = await getDb();
   const [routineRows, scheduleRows, exceptionRows] = await Promise.all([
@@ -140,6 +145,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
 
   const winners = [...winningItems.values()];
   const metricsByPractice = await getMetricsForPracticeIds(winners.map((item) => item.practice_id));
+  const avodahContextByReviewPractice = await getAvodahReviewContext(reviewDate, winners.map((item) => item.practice_id));
   const weeklyGoalProgress = await getWeeklyGoalProgress(
     reviewDate,
     winners.filter((item) => item.weekly_target != null && item.weekly_target > 0).map((item) => item.practice_id),
@@ -180,7 +186,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       practiceId: row.practice_id,
       practiceName: row.practice_name,
       displayName: row.display_name_override ?? row.practice_name,
-      helpText: row.help_text_override ?? row.practice_description,
+      helpText: appendHelpText(row.help_text_override ?? row.practice_description, avodahContextByReviewPractice.get(row.practice_id)),
       domainId: row.domain_id,
       domainName: row.domain_name,
       reviewSectionId: row.review_section_id,
@@ -205,6 +211,59 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
   }
 
   return [...sectionMap.values()].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+async function getAvodahReviewContext(reviewDate: string, practiceIds: string[]) {
+  const context = new Map<string, string>();
+  const needsDailyContext = practiceIds.includes('practice_daily_avodah_review');
+  const needsWeeklyContext = practiceIds.includes('practice_weekly_avodah_review');
+  if (!needsDailyContext && !needsWeeklyContext) return context;
+
+  const db = await getDb();
+  const [dailyAvodah, weeklyAvodah] = await Promise.all([
+    needsDailyContext ? getLatestPracticeTextBeforeDate(db, 'practice_daily_avodah', reviewDate) : Promise.resolve(null),
+    needsWeeklyContext ? getLatestPracticeTextBeforeDate(db, 'practice_weekly_avodah', reviewDate) : Promise.resolve(null),
+  ]);
+
+  if (dailyAvodah?.text?.trim()) {
+    context.set('practice_daily_avodah_review', `Most recent Daily Avodah (${dailyAvodah.entry_date}): ${dailyAvodah.text.trim()}`);
+  }
+  if (weeklyAvodah?.text?.trim()) {
+    context.set('practice_weekly_avodah_review', `Most recent Weekly Avodah (${weeklyAvodah.entry_date}): ${weeklyAvodah.text.trim()}`);
+  }
+  return context;
+}
+
+async function getLatestPracticeTextBeforeDate(
+  db: Awaited<ReturnType<typeof getDb>>,
+  practiceId: string,
+  reviewDate: string,
+) {
+  return db.getFirstAsync<AvodahContextRow>(
+    `SELECT de.entry_date,
+      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as text
+     FROM daily_entries de
+     LEFT JOIN metrics m ON m.practice_id = de.practice_id
+      AND m.metric_type = 'text'
+      AND m.active = 1
+     LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id
+      AND emv.metric_id = m.id
+     WHERE de.user_id = ?
+      AND de.practice_id = ?
+      AND de.entry_date < ?
+      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+     ORDER BY de.entry_date DESC
+     LIMIT 1`,
+    LOCAL_USER_ID,
+    practiceId,
+    reviewDate,
+  );
+}
+
+function appendHelpText(baseHelpText: string | null | undefined, contextText: string | undefined) {
+  if (!contextText) return baseHelpText;
+  const base = baseHelpText?.trim();
+  return base ? `${base}\n${contextText}` : contextText;
 }
 
 async function getWeeklyGoalProgress(reviewDate: string, practiceIds: string[]) {
