@@ -3,6 +3,12 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/daily-morning-reminder",
+      "schedule": "30 9 * * *"
+    }
+  ],
   "redirects": [
     {
       "source": "/(.*)",
