@@ -167,7 +167,7 @@ export default function SettingsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>Account, tutorial, domains, blockers, and reminders.</Text>
+        <Text style={styles.subtitle}>Account, tutorial, domains, blockers, and email reminders.</Text>
       </View>
 
       <View style={styles.cloudBox}>
@@ -328,17 +328,10 @@ function ReminderSettings({
   onReload: () => Promise<void>;
   setMessage: (message: string | null) => void;
 }) {
-  const [time, setTime] = useState(preferences.morningReminderTime);
-
-  useEffect(() => {
-    setTime(preferences.morningReminderTime);
-  }, [preferences.morningReminderTime]);
-
   async function save(next: Partial<ReminderPreferences>, message: string) {
     try {
       const saved = await updateReminderPreferences(next);
       onChange(saved);
-      setTime(saved.morningReminderTime);
       setMessage(await syncedMessage(message));
       await onReload();
     } catch (error) {
@@ -366,27 +359,14 @@ function ReminderSettings({
         </View>
         <View style={styles.preferenceRow}>
           <View style={styles.preferenceText}>
-            <Text style={styles.smallTitle}>Morning reminder</Text>
-            <Text style={styles.preferenceMeta}>Show the morning reminder card and browser notification.</Text>
+            <Text style={styles.smallTitle}>Daily morning email</Text>
+            <Text style={styles.preferenceMeta}>Email your current avodah and yesterday's completed review each morning.</Text>
           </View>
           <ToggleButton
             label={preferences.morningReminderEnabled ? 'On' : 'Off'}
             selected={preferences.morningReminderEnabled}
-            onPress={() => save({ morningReminderEnabled: !preferences.morningReminderEnabled }, 'Morning reminder setting saved.')}
+            onPress={() => save({ morningReminderEnabled: !preferences.morningReminderEnabled }, 'Daily email setting saved.')}
           />
-        </View>
-        <View style={styles.timeRow}>
-          <View style={styles.preferenceText}>
-            <Text style={styles.smallTitle}>Reminder time</Text>
-          </View>
-          <TextInput
-            onChangeText={setTime}
-            placeholder="05:30"
-            placeholderTextColor={colors.muted}
-            style={[styles.input, styles.timeInput]}
-            value={time}
-          />
-          <ActionButton icon={<Save color={colors.ink} size={17} />} label="Save time" onPress={() => save({ morningReminderTime: time }, 'Reminder time saved.')} />
         </View>
       </View>
     </View>
@@ -477,7 +457,7 @@ function TutorialSection() {
     {
       title: 'Reminders',
       text:
-        'Settings lets you opt into practice reminders and the morning reminder. If practice reminders are on, markable practices can be remembered for tomorrow. The morning reminder can show your Daily Avodah and the practices you marked.',
+        'Settings lets you opt into practice reminders and the daily morning email. If practice reminders are on, markable practices can be remembered for tomorrow. The daily email can include your current avodah and yesterday\'s completed review.',
     },
     {
       title: 'Trends',
@@ -916,19 +896,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: '900',
-  },
-  timeInput: {
-    minWidth: 94,
-    width: 110,
-  },
-  timeRow: {
-    alignItems: 'center',
-    borderTopColor: colors.softLine,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    paddingTop: spacing.md,
   },
   toggleButton: {
     alignItems: 'center',

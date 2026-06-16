@@ -1,6 +1,6 @@
 import { Bell, CalendarDays, Flame, LogIn, NotebookPen } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
@@ -46,44 +46,6 @@ export default function HomeScreen() {
     }, [today]),
   );
 
-  useEffect(() => {
-    if (!summary || !reminderPreferences?.morningReminderEnabled) return;
-    const body = morningReminderText(summary);
-    if (!body || typeof window === 'undefined' || !('Notification' in window)) return;
-    const storageKey = `cheshbon_morning_reminder_${today}`;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const showNotification = () => {
-      if (window.localStorage.getItem(storageKey)) return;
-      window.localStorage.setItem(storageKey, 'shown');
-      new Notification('Good morning', { body });
-    };
-
-    const attemptNotification = () => {
-      const now = new Date();
-      const target = morningReminderTarget(now, reminderPreferences.morningReminderTime);
-      const cutoff = new Date(target);
-      cutoff.setHours(12, 0, 0, 0);
-      if (now < target) {
-        timer = setTimeout(attemptNotification, target.getTime() - now.getTime());
-        return;
-      }
-      if (now > cutoff || window.localStorage.getItem(storageKey)) return;
-      if (Notification.permission === 'granted') {
-        showNotification();
-      } else if (Notification.permission === 'default') {
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') showNotification();
-        });
-      }
-    };
-
-    attemptNotification();
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [reminderPreferences, summary, today]);
-
   if (loading || !summary || !reminderPreferences || !cloudStatus) {
     return (
       <View style={styles.center}>
@@ -92,7 +54,7 @@ export default function HomeScreen() {
     );
   }
 
-  const hasMorningReminder = reminderPreferences.morningReminderEnabled && Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
+  const hasMorningReminder = Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -276,27 +238,6 @@ function JournalButton({ kind, label }: { kind: 'gratitude' | 'thoughts'; label:
       <Text style={styles.secondaryButtonText}>{label}</Text>
     </Pressable>
   );
-}
-
-function morningReminderText(summary: HomeSummary) {
-  const lines: string[] = [];
-  if (summary.morningReminder.dailyAvodah) {
-    lines.push(`Today you wanted to work on: ${summary.morningReminder.dailyAvodah}`);
-  }
-  if (summary.morningReminder.markedPractices.length) {
-    lines.push('Remember to focus on the following practices today:');
-    summary.morningReminder.markedPractices.forEach((practice, index) => {
-      lines.push(`${index + 1}. ${practice}`);
-    });
-  }
-  return lines.join('\n');
-}
-
-function morningReminderTarget(now: Date, time = '05:30') {
-  const [hours, minutes] = time.split(':').map(Number);
-  const target = new Date(now);
-  target.setHours(Number.isFinite(hours) ? hours : 5, Number.isFinite(minutes) ? minutes : 30, 0, 0);
-  return target;
 }
 
 function GoalCard({ title, text, empty }: { title: string; text: string | null; empty: string }) {
