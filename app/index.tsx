@@ -11,7 +11,10 @@ import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 export default function HomeScreen() {
   const today = todayIsoDate();
   const yesterday = addDaysIso(today, -1);
+  const primaryReviewDate = isBeforeNoon() ? yesterday : today;
+  const primaryReviewIsYesterday = primaryReviewDate === yesterday;
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [primaryReviewStatus, setPrimaryReviewStatus] = useState<Pick<HomeSummary, 'reviewStarted' | 'reviewComplete'> | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,17 +25,19 @@ export default function HomeScreen() {
       setLoading(true);
       Promise.all([
         getHomeSummary(today),
+        primaryReviewDate === today ? Promise.resolve(null) : getHomeSummary(primaryReviewDate),
         getReminderPreferences(),
         getOnboardingStatus(),
         getCloudStatus().catch(() => ({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null })),
       ])
-        .then(([nextSummary, nextReminderPreferences, nextOnboardingStatus, nextCloudStatus]) => {
+        .then(([nextSummary, nextPrimaryReviewSummary, nextReminderPreferences, nextOnboardingStatus, nextCloudStatus]) => {
           if (active) {
             if (nextOnboardingStatus.needsOnboarding) {
               router.replace('/welcome');
               return;
             }
             setSummary(nextSummary);
+            setPrimaryReviewStatus(nextPrimaryReviewSummary ?? nextSummary);
             setReminderPreferences(nextReminderPreferences);
             setCloudStatus(nextCloudStatus);
           }
@@ -43,10 +48,10 @@ export default function HomeScreen() {
       return () => {
         active = false;
       };
-    }, [today]),
+    }, [primaryReviewDate, today]),
   );
 
-  if (loading || !summary || !reminderPreferences || !cloudStatus) {
+  if (loading || !summary || !primaryReviewStatus || !reminderPreferences || !cloudStatus) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -55,6 +60,8 @@ export default function HomeScreen() {
   }
 
   const hasMorningReminder = Boolean(summary.morningReminder.dailyAvodah || summary.morningReminder.markedPractices.length);
+  const reviewStarted = primaryReviewStatus.reviewStarted;
+  const reviewComplete = primaryReviewStatus.reviewComplete;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -92,23 +99,35 @@ export default function HomeScreen() {
 
       <View style={styles.primaryPanel}>
         <View style={styles.primaryText}>
-          <Text style={styles.panelTitle}>{summary.reviewComplete ? 'Review Complete' : 'Nightly Review'}</Text>
+          <Text style={styles.panelTitle}>
+            {reviewComplete
+              ? 'Review Complete'
+              : primaryReviewIsYesterday
+                ? "Complete yesterday's review"
+                : 'Nightly Review'}
+          </Text>
           <Text style={styles.panelCopy}>
-            {summary.reviewComplete
-              ? 'Your Daily Cheshbon is complete for today. You can still edit it if something important comes back to mind.'
-              : summary.reviewStarted
+            {reviewComplete
+              ? `Your Daily Cheshbon is complete for ${primaryReviewIsYesterday ? 'yesterday' : 'today'}. You can still edit it if something important comes back to mind.`
+              : reviewStarted
                 ? 'Progress is saved. Continue when you are ready, then mark it complete.'
                 : 'Reviewing your day cultivates real time awareness and helps you stay mindful.'}
           </Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          onPress={() => openReview(today)}
-          style={[styles.reviewButton, summary.reviewComplete && styles.editReviewButton]}
+          onPress={() => openReview(primaryReviewDate)}
+          style={[styles.reviewButton, reviewComplete && styles.editReviewButton]}
         >
           <NotebookPen color="#FFFFFF" size={18} />
           <Text style={styles.reviewButtonText}>
-            {summary.reviewComplete ? 'Edit review' : summary.reviewStarted ? 'Continue review' : 'Start nightly review'}
+            {reviewComplete
+              ? 'Edit review'
+              : reviewStarted
+                ? 'Continue review'
+                : primaryReviewIsYesterday
+                  ? "Complete yesterday's review"
+                  : 'Start nightly review'}
           </Text>
         </Pressable>
       </View>
@@ -226,6 +245,10 @@ export default function HomeScreen() {
 
 function openReview(date: string) {
   router.push({ pathname: '/review/[date]', params: { date } });
+}
+
+function isBeforeNoon() {
+  return new Date().getHours() < 12;
 }
 
 function JournalButton({ kind, label }: { kind: 'gratitude' | 'thoughts'; label: string }) {
