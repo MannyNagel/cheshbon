@@ -242,7 +242,6 @@ function buildYesterdayReview(snapshot, yesterday) {
 
   const lines = [
     `Completed: yes`,
-    `Sleep: ${session.bed_time || 'n/a'} to ${session.wake_time || 'n/a'}`,
     ...optionalLine('Note', session.note),
   ];
   const entries = reviewEntries(snapshot, yesterday);

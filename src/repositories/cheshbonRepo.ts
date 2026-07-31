@@ -562,8 +562,8 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
   return {
     session: {
       generalDayRating: session?.general_day_rating,
-      bedTime: session?.bed_time,
-      wakeTime: session?.wake_time,
+      bedTime: null,
+      wakeTime: null,
       mainWin: session?.main_win,
       mainStruggle: session?.main_struggle,
       patternNoticed: session?.pattern_noticed,
@@ -599,8 +599,8 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
       LOCAL_USER_ID,
       reviewDate,
       draft.session.generalDayRating ?? null,
-      draft.session.bedTime ?? null,
-      draft.session.wakeTime ?? null,
+      null,
+      null,
       draft.session.mainWin ?? null,
       draft.session.mainStruggle ?? null,
       draft.session.patternNoticed ?? null,
@@ -1470,8 +1470,6 @@ export async function exportReadableData() {
     ),
     db.getAllAsync<{
       review_date: string;
-      bed_time: string | null;
-      wake_time: string | null;
       general_day_rating: number | null;
       main_win: string | null;
       main_struggle: string | null;
@@ -1481,8 +1479,6 @@ export async function exportReadableData() {
       completed_at: string | null;
     }>(
       `SELECT review_date,
-        bed_time,
-        wake_time,
         general_day_rating,
         main_win,
         main_struggle,
@@ -1631,8 +1627,6 @@ function formatRoutineExportRows(
 function formatSessionExportRows(
   rows: Array<{
     review_date: string;
-    bed_time: string | null;
-    wake_time: string | null;
     general_day_rating: number | null;
     main_win: string | null;
     main_struggle: string | null;
@@ -1646,7 +1640,6 @@ function formatSessionExportRows(
   return rows.flatMap((row) => [
     `### ${row.review_date}`,
     `Completed: ${row.completed_at ? 'yes' : 'no'}`,
-    `Sleep: ${row.bed_time || 'n/a'} to ${row.wake_time || 'n/a'}`,
     `Day rating: ${row.general_day_rating == null ? 'n/a' : `${row.general_day_rating}/5`}`,
     ...formatOptionalLine('Win', row.main_win),
     ...formatOptionalLine('Struggle', row.main_struggle),

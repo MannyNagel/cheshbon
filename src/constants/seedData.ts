@@ -4,7 +4,7 @@ export const domains = [
   ['domain_tefillah_brachot', 'Tefillah & Brachot', 'Prayer, blessings, and attention before Hashem'],
   ['domain_torah', 'Torah Learning', 'Learning blocks, chavrusa, seder, and preparation'],
   ['domain_technology', 'Technology & Kedushah', 'Phone, computer, distraction, and digital boundaries'],
-  ['domain_health', 'Health & Self-Mastery', 'Eating, sleep, exercise, and self-command'],
+  ['domain_health', 'Health & Self-Mastery', 'Eating, exercise, and self-command'],
   ['domain_middos', 'Middos', 'Character work and emotional responsibility'],
   ['domain_chaveiro', "Bein Adam L'chaveiro", 'Interpersonal obligations and presence'],
   ['domain_family', 'Marriage / Family', 'Home, family, and close relationships'],
@@ -180,13 +180,6 @@ export type PracticeSeed = {
 };
 
 export const practices: PracticeSeed[] = [
-  {
-    id: 'practice_sleep',
-    domainId: 'domain_health',
-    name: 'Sleep',
-    description: 'Notice the quality of sleep and how it affected the day.',
-    metrics: [{ id: 'metric_sleep_quality', name: 'Quality', metricType: 'scale', scaleMin: 1, scaleMax: 5 }],
-  },
   {
     id: 'practice_modeh_ani',
     domainId: 'domain_foundations',

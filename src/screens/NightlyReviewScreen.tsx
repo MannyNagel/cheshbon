@@ -189,35 +189,6 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
         </View>
       ) : (
         <View style={styles.content}>
-          <View style={styles.sleepCard}>
-            <Text style={styles.sleepTitle}>Sleep</Text>
-            <View style={styles.sleepRow}>
-              <View style={styles.sleepField}>
-                <Text style={styles.inputLabel}>Bed last night</Text>
-                <TextInput
-                  onChangeText={(bedTime) =>
-                    setDraft((current) => ({ ...current, session: { ...current.session, bedTime } }))
-                  }
-                  placeholder="10:45 PM"
-                  placeholderTextColor={colors.muted}
-                  style={styles.sleepInput}
-                  value={draft.session.bedTime ?? ''}
-                />
-              </View>
-              <View style={styles.sleepField}>
-                <Text style={styles.inputLabel}>Got out of bed</Text>
-                <TextInput
-                  onChangeText={(wakeTime) =>
-                    setDraft((current) => ({ ...current, session: { ...current.session, wakeTime } }))
-                  }
-                  placeholder="7:15 AM"
-                  placeholderTextColor={colors.muted}
-                  style={styles.sleepInput}
-                  value={draft.session.wakeTime ?? ''}
-                />
-              </View>
-            </View>
-          </View>
           {sections.length === 0 ? (
             <Text style={styles.empty}>No routines are active for this date.</Text>
           ) : (
@@ -482,45 +453,6 @@ const styles = StyleSheet.create({
   empty: {
     color: colors.muted,
     fontSize: 16,
-  },
-  sleepCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.lg,
-  },
-  sleepTitle: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  sleepRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  sleepField: {
-    flex: 1,
-    gap: spacing.sm,
-    minWidth: 160,
-  },
-  sleepInput: {
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: colors.ink,
-    fontSize: 15,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  inputLabel: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
   },
   actionRow: {
     alignItems: 'center',

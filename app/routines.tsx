@@ -29,6 +29,14 @@ type RoutineTask = Awaited<ReturnType<typeof getRoutineTasks>>[number];
 const emptySchedule = { startDate: '', endDate: '', daysOfWeek: allDays };
 const emptyRoutineForm = { name: '', description: '', active: true };
 
+function sortRoutineRows(rows: RoutineRow[]) {
+  return [...rows].sort((a, b) => {
+    const aActive = a.active ? 0 : 1;
+    const bActive = b.active ? 0 : 1;
+    return aActive - bActive || a.priority - b.priority || a.name.localeCompare(b.name);
+  });
+}
+
 export default function RoutinesScreen() {
   const [date, setDate] = useState(todayIsoDate());
   const [data, setData] = useState<RoutineRow[]>([]);
@@ -52,17 +60,26 @@ export default function RoutinesScreen() {
     setLoading(true);
     const [routineRows, active] = await Promise.all([getRoutinesWithSchedules(date), getActiveRoutinesForDate(date)]);
     const activeRoutineIds = active.map((routine) => routine.id);
-    setData(
-      routineRows.sort((a, b) => {
-        const aActive = a.active ? 0 : 1;
-        const bActive = b.active ? 0 : 1;
-        return aActive - bActive || a.priority - b.priority || a.name.localeCompare(b.name);
-      }),
-    );
+    setData(sortRoutineRows(routineRows));
     setActiveNames(active.map((routine) => routine.name));
     setActiveIds(activeRoutineIds);
     setLoading(false);
   }, [date]);
+
+  async function refreshEditingRoutine(routineId: string) {
+    await load();
+    const routine = sortRoutineRows(await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
+    setEditingRoutine(routine);
+    setEditingScheduleDates((current) => {
+      const validScheduleIds = new Set(routine?.schedules.map((schedule) => schedule.id) ?? []);
+      return Object.fromEntries(Object.entries(current).filter(([scheduleId]) => validScheduleIds.has(scheduleId)));
+    });
+    if (routine) {
+      const tasks = await getRoutineTasks(routine.id);
+      setTasksByRoutine((current) => ({ ...current, [routine.id]: tasks }));
+    }
+    return routine;
+  }
 
   useEffect(() => {
     load();
@@ -89,6 +106,13 @@ export default function RoutinesScreen() {
     setShowNewDateRange(false);
     setEditingScheduleDates({});
     setMessage(null);
+    void getRoutineTasks(routine.id)
+      .then((tasks) => {
+        setTasksByRoutine((current) => ({ ...current, [routine.id]: tasks }));
+      })
+      .catch((error) => {
+        setMessage(error instanceof Error ? error.message : 'Could not load routine practices.');
+      });
   }
 
   async function saveRoutine() {
@@ -96,50 +120,82 @@ export default function RoutinesScreen() {
       setMessage('Routine name is required.');
       return;
     }
-    if (mode === 'add') {
-      const routineId = await createRoutine({
-        name: form.name,
-        description: form.description,
-        startDate: newSchedule.startDate,
-        endDate: newSchedule.endDate,
-        daysOfWeek: newSchedule.daysOfWeek,
-      });
-      setCreatedRoutineId(routineId);
-      setMode('edit');
-      await load();
-      const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
-      setEditingRoutine(routine);
-      setMessage(await syncedMessage('Routine created. Add practices below or add more date ranges.'));
-      return;
-    }
-    if (editingRoutine) {
-      await updateRoutine({ id: editingRoutine.id, ...form });
-      setMessage(await syncedMessage('Routine updated.'));
-      await load();
-      const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === editingRoutine.id) ?? null;
-      setEditingRoutine(routine);
+    try {
+      if (mode === 'add') {
+        const routineId = await createRoutine({
+          name: form.name,
+          description: form.description,
+          startDate: newSchedule.startDate,
+          endDate: newSchedule.endDate,
+          daysOfWeek: newSchedule.daysOfWeek,
+        });
+        setCreatedRoutineId(routineId);
+        setMode('edit');
+        await refreshEditingRoutine(routineId);
+        setMessage(await syncedMessage('Routine created. Add practices below or add more date ranges.'));
+        return;
+      }
+      if (editingRoutine) {
+        await updateRoutine({ id: editingRoutine.id, ...form });
+        await refreshEditingRoutine(editingRoutine.id);
+        setMessage(await syncedMessage('Routine updated.'));
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not save routine.');
     }
   }
 
   async function addScheduleRange() {
     const routineId = editingRoutine?.id ?? createdRoutineId;
     if (!routineId) return;
-    await addRoutineSchedule({ routineId, ...newSchedule });
-    setNewSchedule(emptySchedule);
-    setShowNewDateRange(false);
-    setMessage(await syncedMessage('Date range added.'));
-    await load();
-    const routine = (await getRoutinesWithSchedules(date)).find((row) => row.id === routineId) ?? null;
-    setEditingRoutine(routine);
+    try {
+      await addRoutineSchedule({ routineId, ...newSchedule });
+      setNewSchedule(emptySchedule);
+      setShowNewDateRange(false);
+      await refreshEditingRoutine(routineId);
+      setMessage(await syncedMessage('Date range added.'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not add date range.');
+    }
   }
 
   async function toggleDay(scheduleId: string, days: number[], day: number) {
     const next = days.includes(day) ? days.filter((value) => value !== day) : [...days, day].sort();
-    await updateScheduleDays(scheduleId, next);
-    setMessage(await syncedMessage('Schedule updated.'));
-    await load();
-    if (editingRoutine) {
-      setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editingRoutine.id) ?? null);
+    try {
+      await updateScheduleDays(scheduleId, next);
+      if (editingRoutine) {
+        await refreshEditingRoutine(editingRoutine.id);
+      } else {
+        await load();
+      }
+      setMessage(await syncedMessage('Schedule updated.'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update schedule.');
+    }
+  }
+
+  async function saveScheduleDates(scheduleId: string, startDate: string | null, endDate: string | null, routineId: string) {
+    try {
+      await updateScheduleDates(scheduleId, startDate, endDate);
+      await refreshEditingRoutine(routineId);
+      setMessage(await syncedMessage('Date range updated.'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update date range.');
+    }
+  }
+
+  async function removeScheduleRange(scheduleId: string, routineId: string) {
+    try {
+      await deleteRoutineSchedule(scheduleId);
+      setEditingScheduleDates((current) => {
+        const next = { ...current };
+        delete next[scheduleId];
+        return next;
+      });
+      await refreshEditingRoutine(routineId);
+      setMessage(await syncedMessage('Date range removed.'));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not remove date range.');
     }
   }
 
@@ -292,24 +348,20 @@ export default function RoutinesScreen() {
                         {editingScheduleDates[schedule.id] ? (
                           <View style={styles.datePair}>
                             <TextInput
+                              key={`${schedule.id}-start-${schedule.startDate ?? ''}`}
                               defaultValue={schedule.startDate ?? ''}
                               onEndEditing={async (event) => {
-                                await updateScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate);
-                                setMessage(await syncedMessage('Date range updated.'));
-                                await load();
-                                setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                                await saveScheduleDates(schedule.id, event.nativeEvent.text, schedule.endDate, editRoutine.id);
                               }}
                               placeholder="Start date YYYY-MM-DD"
                               placeholderTextColor={colors.muted}
                               style={styles.scheduleInput}
                             />
                             <TextInput
+                              key={`${schedule.id}-end-${schedule.endDate ?? ''}`}
                               defaultValue={schedule.endDate ?? ''}
                               onEndEditing={async (event) => {
-                                await updateScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text);
-                                setMessage(await syncedMessage('Date range updated.'));
-                                await load();
-                                setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
+                                await saveScheduleDates(schedule.id, schedule.startDate, event.nativeEvent.text, editRoutine.id);
                               }}
                               placeholder="End date YYYY-MM-DD"
                               placeholderTextColor={colors.muted}
@@ -325,12 +377,7 @@ export default function RoutinesScreen() {
                         <ActionButton
                           icon={<Trash2 color={colors.rose} size={16} />}
                           label="Remove range"
-                          onPress={async () => {
-                            await deleteRoutineSchedule(schedule.id);
-                            setMessage(await syncedMessage('Date range removed.'));
-                            await load();
-                            setEditingRoutine((await getRoutinesWithSchedules(date)).find((row) => row.id === editRoutine.id) ?? null);
-                          }}
+                          onPress={() => removeScheduleRange(schedule.id, editRoutine.id)}
                         />
                       </View>
                     ))}
