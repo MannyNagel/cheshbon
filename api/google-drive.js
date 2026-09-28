@@ -124,7 +124,7 @@ async function handleSync(user, request, response) {
   }
 
   if (!documentId) {
-    const document = await createGoogleDocument(accessToken);
+    const document = (await findExistingGoogleDocument(accessToken)) || (await createGoogleDocument(accessToken));
     documentId = document.id;
     documentUrl = document.webViewLink || googleDocumentUrl(documentId);
 
@@ -211,6 +211,27 @@ async function googleDocumentExists(documentId, accessToken) {
   if (result.status === 404) return false;
   if (!result.ok) throw await googleApiError(result, 'Could not open the Google Doc mirror.');
   return true;
+}
+
+async function findExistingGoogleDocument(accessToken) {
+  const query = [
+    `name = '${DOCUMENT_NAME.replace(/'/g, "\\'")}'`,
+    "mimeType = 'application/vnd.google-apps.document'",
+    'trashed = false',
+  ].join(' and ');
+  const params = new URLSearchParams({
+    q: query,
+    spaces: 'drive',
+    orderBy: 'modifiedTime desc',
+    pageSize: '1',
+    fields: 'files(id,webViewLink,modifiedTime)',
+  });
+  const result = await fetch(`${GOOGLE_DRIVE_FILES_URL}?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!result.ok) throw await googleApiError(result, 'Could not find the existing Google Doc mirror.');
+  const payload = await result.json();
+  return Array.isArray(payload?.files) ? payload.files[0] ?? null : null;
 }
 
 async function createGoogleDocument(accessToken) {
