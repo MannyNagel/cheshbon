@@ -282,7 +282,9 @@ async function googleApiError(result, fallback) {
   if (result.status === 403 && /docs api|docs\.googleapis\.com|has not been used|is disabled/i.test(message || '')) {
     return httpError(424, 'Google Docs API is not enabled for the Daily Cheshbon Google project.');
   }
-  return httpError(result.status === 401 ? 401 : 502, message || fallback);
+  const error = httpError(result.status === 401 ? 401 : 502, message || fallback);
+  error.expose = true;
+  return error;
 }
 
 async function getSupabaseUser(authorization) {
@@ -614,6 +616,7 @@ function textValue(value, fallback) {
 }
 
 function publicErrorMessage(error) {
+  if (error?.expose) return error.message;
   if (error?.statusCode && error.statusCode < 500) return error.message;
   if (error?.message === 'Google Drive access expired. Reconnect Google Drive in Settings.') return error.message;
   return 'Google Drive could not be updated. Please try again.';
