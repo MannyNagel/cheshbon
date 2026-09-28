@@ -127,6 +127,14 @@ async function handleSync(user, request, response) {
     const document = await createGoogleDocument(accessToken);
     documentId = document.id;
     documentUrl = document.webViewLink || googleDocumentUrl(documentId);
+
+    // Remember the file before inserting content. If Google Docs rejects the
+    // write, a retry should repair this document instead of creating another.
+    await upsertConnection(user.id, {
+      document_id: documentId,
+      document_url: documentUrl,
+      updated_at: new Date().toISOString(),
+    });
   }
 
   await replaceGoogleDocument(documentId, markdown, accessToken);
@@ -250,6 +258,9 @@ async function replaceGoogleDocument(documentId, markdown, accessToken) {
 async function googleApiError(result, fallback) {
   const payload = await result.json().catch(() => null);
   const message = payload?.error?.message;
+  if (result.status === 403 && /docs api|docs\.googleapis\.com|has not been used|is disabled/i.test(message || '')) {
+    return httpError(424, 'Google Docs API is not enabled for the Daily Cheshbon Google project.');
+  }
   return httpError(result.status === 401 ? 401 : 502, message || fallback);
 }
 
