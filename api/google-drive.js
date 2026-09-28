@@ -130,7 +130,7 @@ async function handleSync(user, request, response) {
 
     // Remember the file before inserting content. If Google Docs rejects the
     // write, a retry should repair this document instead of creating another.
-    await upsertConnection(user.id, {
+    await updateConnection(user.id, {
       document_id: documentId,
       document_url: documentUrl,
       updated_at: new Date().toISOString(),
@@ -139,7 +139,7 @@ async function handleSync(user, request, response) {
 
   await replaceGoogleDocument(documentId, markdown, accessToken);
   const lastSyncedAt = new Date().toISOString();
-  await upsertConnection(user.id, {
+  await updateConnection(user.id, {
     document_id: documentId,
     document_url: documentUrl || googleDocumentUrl(documentId),
     last_synced_at: lastSyncedAt,
@@ -320,6 +320,18 @@ async function upsertConnection(userId, values) {
     headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ user_id: userId, ...values }),
   });
+  await result.text();
+}
+
+async function updateConnection(userId, values) {
+  const result = await supabaseServiceRequest(
+    `/rest/v1/google_drive_connections?user_id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify(values),
+    },
+  );
   await result.text();
 }
 
