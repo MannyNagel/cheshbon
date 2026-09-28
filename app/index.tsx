@@ -28,9 +28,8 @@ export default function HomeScreen() {
         primaryReviewDate === today ? Promise.resolve(null) : getHomeSummary(primaryReviewDate),
         getReminderPreferences(),
         getOnboardingStatus(),
-        getCloudStatus().catch(() => ({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null })),
       ])
-        .then(([nextSummary, nextPrimaryReviewSummary, nextReminderPreferences, nextOnboardingStatus, nextCloudStatus]) => {
+        .then(([nextSummary, nextPrimaryReviewSummary, nextReminderPreferences, nextOnboardingStatus]) => {
           if (active) {
             if (nextOnboardingStatus.needsOnboarding) {
               router.replace('/welcome');
@@ -39,11 +38,25 @@ export default function HomeScreen() {
             setSummary(nextSummary);
             setPrimaryReviewStatus(nextPrimaryReviewSummary ?? nextSummary);
             setReminderPreferences(nextReminderPreferences);
-            setCloudStatus(nextCloudStatus);
           }
         })
         .finally(() => {
           if (active) setLoading(false);
+        });
+      getCloudStatus()
+        .then((nextCloudStatus) => {
+          if (active) setCloudStatus(nextCloudStatus);
+        })
+        .catch(() => {
+          if (active) {
+            setCloudStatus((current) => current ?? {
+              configured: true,
+              signedIn: true,
+              email: null,
+              name: null,
+              lastSyncedAt: null,
+            });
+          }
         });
       return () => {
         active = false;
@@ -51,7 +64,7 @@ export default function HomeScreen() {
     }, [primaryReviewDate, today]),
   );
 
-  if (loading || !summary || !primaryReviewStatus || !reminderPreferences || !cloudStatus) {
+  if (loading || !summary || !primaryReviewStatus || !reminderPreferences) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.blue} />
@@ -65,7 +78,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {!cloudStatus.signedIn ? (
+      {cloudStatus && !cloudStatus.signedIn ? (
         <View style={styles.accountPrompt}>
           <View style={styles.accountPromptText}>
             <Text style={styles.accountPromptTitle}>Sign in to your account</Text>

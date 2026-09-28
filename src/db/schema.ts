@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS routine_templates (
   routine_type TEXT NOT NULL DEFAULT 'custom',
   priority INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
+  deleted_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -188,6 +189,8 @@ CREATE TABLE IF NOT EXISTS practice_blockers (
 CREATE TABLE IF NOT EXISTS entry_blockers (
   entry_id TEXT NOT NULL,
   blocker_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (entry_id, blocker_id),
   FOREIGN KEY (entry_id) REFERENCES daily_entries(id),
   FOREIGN KEY (blocker_id) REFERENCES blockers(id)

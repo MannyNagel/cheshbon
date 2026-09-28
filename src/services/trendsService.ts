@@ -92,6 +92,7 @@ export async function getTrendSummary(): Promise<TrendSummary> {
        JOIN daily_entries de ON de.id = eb.entry_id
        JOIN practices p ON p.id = de.practice_id
        WHERE de.entry_date >= ?
+        AND eb.enabled = 1
         AND EXISTS (
           SELECT 1
           FROM routine_practices rp
@@ -174,6 +175,7 @@ export async function getQualitativeTrendSummary(): Promise<QualitativeTrendSumm
        JOIN domains d ON d.id = p.domain_id
        WHERE de.entry_date >= ?
         AND de.entry_date <= ?
+        AND eb.enabled = 1
         AND p.active = 1
         AND d.active = 1
         AND EXISTS (

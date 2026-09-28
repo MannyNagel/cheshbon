@@ -261,6 +261,7 @@ function reviewEntries(snapshot, date) {
   const blockersById = new Map((snapshot.tables?.blockers ?? []).map((row) => [row.id, row]));
   const blockerIdsByEntryId = new Map();
   for (const row of snapshot.tables?.entry_blockers ?? []) {
+    if (row.enabled === 0) continue;
     const list = blockerIdsByEntryId.get(row.entry_id) ?? [];
     list.push(row.blocker_id);
     blockerIdsByEntryId.set(row.entry_id, list);

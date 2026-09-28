@@ -501,6 +501,7 @@ async function getBlockers(startDate: string, endDate: string) {
      JOIN domains d ON d.id = p.domain_id
      WHERE de.entry_date >= ?
       AND de.entry_date <= ?
+      AND eb.enabled = 1
      ORDER BY de.entry_date, b.name`,
     startDate,
     endDate,

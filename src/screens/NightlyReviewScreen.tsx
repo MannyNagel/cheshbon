@@ -9,14 +9,15 @@ import type { Blocker, EntryDraft, NightlyReviewDraft, NightlyReviewSection } fr
 import { getActiveBlockers, getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getNightlyReviewItems } from '@/src/services/activeRoutineService';
-import { addDaysIso, dayName, dayOfMonth, monthDay, shortDayName, todayIsoDate } from '@/src/utils/dates';
+import { addDaysIso, dayName, dayOfMonth, monthDay, normalizeReviewDate, shortDayName, todayIsoDate } from '@/src/utils/dates';
 
 type Props = {
   initialDate?: string;
 };
 
 export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
-  const [reviewDate, setReviewDate] = useState(initialDate);
+  const [reviewDate, setReviewDate] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
+  const [dateInput, setDateInput] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [sections, setSections] = useState<NightlyReviewSection[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {} });
@@ -28,8 +29,14 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
 
   useEffect(() => {
-    setReviewDate(initialDate);
+    const nextDate = normalizeReviewDate(initialDate) ?? todayIsoDate();
+    setReviewDate(nextDate);
+    setDateInput(nextDate);
   }, [initialDate]);
+
+  useEffect(() => {
+    setDateInput(reviewDate);
+  }, [reviewDate]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +75,23 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
         [entry.practiceId]: entry,
       },
     }));
+  }
+
+  function applyReviewDate(value: string) {
+    const trimmed = value.trim();
+    const nextDate = normalizeReviewDate(trimmed);
+    if (!nextDate) {
+      setDateInput(reviewDate);
+      setMessage('Enter a valid date as YYYY-MM-DD.');
+      return;
+    }
+    if (trimmed > todayIsoDate()) {
+      setMessage('Future reviews are not available. Showing today instead.');
+    } else {
+      setMessage(null);
+    }
+    setReviewDate(nextDate);
+    setDateInput(nextDate);
   }
 
   async function save(complete = false) {
@@ -119,7 +143,7 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
             style={styles.logoMark}
           />
           <View style={styles.brandText}>
-            <Text style={styles.eyebrow}>Nightly review</Text>
+            <Text style={styles.eyebrow}>{reviewHeading(reviewDate)}</Text>
             <Text style={styles.title}>Daily Cheshbon</Text>
             <Text style={styles.tagline}>A nightly cheshbon hanefesh for intentional growth.</Text>
           </View>
@@ -148,15 +172,19 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
             const selected = date === reviewDate;
             const saved = savedDates.has(date);
             const missed = date < todayIsoDate() && !saved;
+            const future = date > todayIsoDate();
             return (
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: future, selected }}
+                disabled={future}
                 key={date}
-                onPress={() => setReviewDate(date)}
+                onPress={() => applyReviewDate(date)}
                 style={[
                   calendarMode === 'week' ? styles.calendarDay : styles.monthDay,
                   saved && styles.calendarDaySaved,
                   missed && styles.calendarDayMissed,
+                  future && styles.calendarDayFuture,
                   selected && styles.calendarDaySelected,
                 ]}
               >
@@ -167,17 +195,26 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
           })}
         </View>
         <View style={styles.dateRow}>
-          <IconButton label="Previous day" onPress={() => setReviewDate(addDaysIso(reviewDate, -1))}>
+          <IconButton label="Previous day" onPress={() => applyReviewDate(addDaysIso(reviewDate, -1))}>
             <SkipBack color={colors.ink} size={18} />
           </IconButton>
           <TextInput
-            onChangeText={setReviewDate}
+            autoCorrect={false}
+            inputMode="numeric"
+            maxLength={10}
+            onBlur={() => applyReviewDate(dateInput)}
+            onChangeText={setDateInput}
+            onSubmitEditing={() => applyReviewDate(dateInput)}
             style={styles.dateInput}
-            value={reviewDate}
+            value={dateInput}
             placeholder="YYYY-MM-DD"
             placeholderTextColor={colors.muted}
           />
-          <IconButton label="Next day" onPress={() => setReviewDate(addDaysIso(reviewDate, 1))}>
+          <IconButton
+            disabled={reviewDate >= todayIsoDate()}
+            label="Next day"
+            onPress={() => applyReviewDate(addDaysIso(reviewDate, 1))}
+          >
             <SkipForward color={colors.ink} size={18} />
           </IconButton>
         </View>
@@ -238,9 +275,23 @@ function getCalendarRange(reviewDate: string, mode: 'week' | 'month') {
   return { start: dates[0], end: dates[dates.length - 1] };
 }
 
-function IconButton({ label, children, onPress }: { label: string; children: React.ReactNode; onPress: () => void }) {
+function reviewHeading(reviewDate: string) {
+  const today = todayIsoDate();
+  if (reviewDate === today) return 'Nightly review';
+  if (reviewDate === addDaysIso(today, -1)) return "Yesterday's review";
+  return 'Daily review';
+}
+
+function IconButton({ label, children, onPress, disabled = false }: { label: string; children: React.ReactNode; onPress: () => void; disabled?: boolean }) {
   return (
-    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress} style={styles.iconButton}>
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.iconButton, disabled && styles.iconButtonDisabled]}
+    >
       {children}
     </Pressable>
   );
@@ -356,6 +407,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.roseSoft,
     borderColor: colors.rose,
   },
+  calendarDayFuture: {
+    opacity: 0.35,
+  },
   monthDay: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -427,6 +481,9 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     width: 44,
+  },
+  iconButtonDisabled: {
+    opacity: 0.35,
   },
   dateInput: {
     backgroundColor: colors.surface,

@@ -57,7 +57,7 @@ type AvodahContextRow = {
 export async function getActiveRoutinesForDate(reviewDate: string): Promise<RoutineTemplate[]> {
   const db = await getDb();
   const [routineRows, scheduleRows, exceptionRows] = await Promise.all([
-    db.getAllAsync<RoutineRow>('SELECT * FROM routine_templates WHERE active = 1'),
+    db.getAllAsync<RoutineRow>('SELECT * FROM routine_templates WHERE active = 1 AND deleted_at IS NULL'),
     db.getAllAsync<ScheduleRow>('SELECT * FROM routine_schedules WHERE active = 1'),
     db.getAllAsync<ExceptionRow>('SELECT routine_template_id, action FROM routine_exceptions WHERE exception_date = ?', reviewDate),
   ]);

@@ -12,7 +12,6 @@ import {
 } from '@/src/constants/seedData';
 import { schemaSql } from '@/src/db/schema';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
-import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -34,10 +33,13 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
+  await ensureColumn(db, 'routine_templates', 'deleted_at', 'TEXT');
   await ensureColumn(db, 'practices', 'allow_note', 'INTEGER NOT NULL DEFAULT 1');
   await ensureColumn(db, 'practices', 'markable', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'practices', 'weekly_target', 'INTEGER');
   await ensureColumn(db, 'daily_entries', 'remind_tomorrow', 'INTEGER NOT NULL DEFAULT 0');
+  await ensureColumn(db, 'entry_blockers', 'enabled', 'INTEGER NOT NULL DEFAULT 1');
+  await ensureColumn(db, 'entry_blockers', 'updated_at', 'TEXT');
   const existing = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM domains');
   if (!existing?.count) {
     await seedDatabase(db);
@@ -45,7 +47,6 @@ export async function initializeDatabase() {
   await ensureRoshChodeshRoutine(db);
   await ensureReflectionDefaults(db);
   await normalizeQualityScale(db);
-  await normalizeReviewCompletionState(db);
 }
 
 async function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: string, definition: string) {
@@ -264,13 +265,6 @@ export async function ensureRoshChodeshRoutine(db?: SQLite.SQLiteDatabase) {
          WHERE active = 1`,
         practice.id,
       );
-      await targetDb.runAsync(
-        `UPDATE practice_blockers
-         SET enabled = 0,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE practice_id = ?`,
-        practice.id,
-      );
     }
 
     for (const [id, routineId, practiceId, sectionId, sortOrder, required, displayName, helpText] of roshChodeshRoutinePractices) {
@@ -326,12 +320,6 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
         description,
         domains.findIndex(([domainId]) => domainId === id) + 1,
       );
-      await targetDb.runAsync(
-        'UPDATE domains SET name = ?, description = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        name,
-        description,
-        id,
-      );
     }
 
     for (const practice of reflectionPractices) {
@@ -344,14 +332,6 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
         practice.name,
         practice.description ?? null,
         allowNote,
-      );
-      await targetDb.runAsync(
-        'UPDATE practices SET domain_id = ?, name = ?, description = ?, allow_note = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-        practice.domainId,
-        practice.name,
-        practice.description ?? null,
-        allowNote,
-        practice.id,
       );
 
       for (const [index, metric] of practice.metrics.entries()) {
@@ -369,17 +349,6 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
           metric.helpText ?? null,
           index + 1,
         );
-        await targetDb.runAsync(
-          'UPDATE metrics SET name = ?, metric_type = ?, scale_min = ?, scale_max = ?, required = ?, help_text = ?, sort_order = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          metric.name,
-          metric.metricType,
-          metric.scaleMin ?? null,
-          metric.scaleMax ?? null,
-          metric.required ? 1 : 0,
-          metric.helpText ?? null,
-          index + 1,
-          metric.id,
-        );
       }
 
       await targetDb.runAsync(
@@ -387,13 +356,6 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
          SELECT ?, id, 0
          FROM blockers
          WHERE active = 1`,
-        practice.id,
-      );
-      await targetDb.runAsync(
-        `UPDATE practice_blockers
-         SET enabled = 0,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE practice_id = ?`,
         practice.id,
       );
     }
@@ -411,25 +373,6 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
         required,
         displayName,
         helpText,
-      );
-      await targetDb.runAsync(
-        `UPDATE routine_practices
-         SET routine_template_id = ?,
-          review_section_id = ?,
-          sort_order = ?,
-          required = ?,
-          enabled = 1,
-          display_name_override = ?,
-          help_text_override = ?,
-          updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        routineId,
-        sectionId,
-        sortOrder,
-        required,
-        displayName,
-        helpText,
-        id,
       );
     }
   });
@@ -451,7 +394,6 @@ export async function resetDatabaseToSeedDefaults() {
   await seedDatabase(db);
   await ensureReflectionDefaults(db);
   await normalizeQualityScale(db);
-  await normalizeReviewCompletionState(db);
 }
 
 export async function syncSeedUpdates(db: SQLite.SQLiteDatabase) {

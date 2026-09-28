@@ -7,6 +7,30 @@ export function todayIsoDate() {
   ].join('-');
 }
 
+export function isIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+export function normalizeReviewDate(value: string, latestDate = todayIsoDate()) {
+  const trimmed = value.trim();
+  if (!isIsoDate(trimmed)) return null;
+  return trimmed > latestDate ? latestDate : trimmed;
+}
+
+export function calculateReviewStreak(completedDates: Iterable<string>, today = todayIsoDate()) {
+  const completed = new Set(completedDates);
+  let cursor = completed.has(today) ? today : addDaysIso(today, -1);
+  let streak = 0;
+  while (completed.has(cursor)) {
+    streak += 1;
+    cursor = addDaysIso(cursor, -1);
+  }
+  return streak;
+}
+
 export function addDaysIso(date: string, delta: number) {
   const [year, month, day] = date.split('-').map(Number);
   const value = new Date(year, month - 1, day + delta);

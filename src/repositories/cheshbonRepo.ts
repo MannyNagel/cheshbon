@@ -4,7 +4,6 @@ import * as Sharing from 'expo-sharing';
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import { ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
-import { normalizeReviewCompletionState } from '@/src/db/reviewCompletion';
 import type {
   Blocker,
   EntryDraft,
@@ -15,7 +14,7 @@ import type {
   RoutineTemplate,
   TrendWeekMode,
 } from '@/src/models/types';
-import { addDaysIso, dayOfWeek, todayIsoDate } from '@/src/utils/dates';
+import { addDaysIso, calculateReviewStreak, dayOfWeek, isIsoDate, todayIsoDate } from '@/src/utils/dates';
 import { makeId } from '@/src/utils/ids';
 
 type BlockerRow = { id: string; name: string; description: string | null; active: number };
@@ -130,9 +129,6 @@ export async function updateReminderPreferences(input: Partial<ReminderPreferenc
     await setPreference(db, 'task_reminders_enabled', next.taskRemindersEnabled ? '1' : '0');
     await setPreference(db, 'morning_reminder_enabled', next.morningReminderEnabled ? '1' : '0');
     await setPreference(db, 'morning_reminder_time', next.morningReminderTime);
-    if (!next.taskRemindersEnabled) {
-      await db.runAsync('UPDATE daily_entries SET remind_tomorrow = 0, updated_at = CURRENT_TIMESTAMP WHERE remind_tomorrow = 1');
-    }
   });
   return next;
 }
@@ -233,6 +229,7 @@ export async function getOnboardingPracticeOptions(): Promise<OnboardingPractice
      JOIN domains d ON d.id = p.domain_id
      WHERE rp.archived_from IS NULL
       AND p.active = 1
+      AND rt.deleted_at IS NULL
       AND rt.id IN ('routine_core', 'routine_shabbos', 'routine_rosh_chodesh')
      ORDER BY rt.priority, rs.sort_order, rp.sort_order, p.name`,
   );
@@ -525,7 +522,7 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     : [];
   const blockerRows = entryIds.length
     ? await db.getAllAsync<{ entry_id: string; blocker_id: string }>(
-        `SELECT * FROM entry_blockers WHERE entry_id IN (${entryIds.map(() => '?').join(',')})`,
+        `SELECT * FROM entry_blockers WHERE enabled = 1 AND entry_id IN (${entryIds.map(() => '?').join(',')})`,
         entryIds,
       )
     : [];
@@ -576,6 +573,8 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
 }
 
 export async function saveNightlyReview(reviewDate: string, draft: NightlyReviewDraft, options: { complete?: boolean } = {}) {
+  if (!isIsoDate(reviewDate)) throw new Error('Choose a valid review date.');
+  if (reviewDate > todayIsoDate()) throw new Error('A review cannot be saved for a future date.');
   const db = await getDb();
   const complete = options.complete === true;
   await db.withTransactionAsync(async () => {
@@ -643,14 +642,32 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
         reviewDate,
       );
       const actualEntryId = persistedEntry?.id ?? entryId;
-      await db.runAsync('DELETE FROM entry_blockers WHERE entry_id = ?', actualEntryId);
+      await db.runAsync(
+        'UPDATE entry_blockers SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE entry_id = ?',
+        actualEntryId,
+      );
+
+      const activeMetricIds = (await db.getAllAsync<{ id: string }>(
+        'SELECT id FROM metrics WHERE practice_id = ? AND active = 1',
+        entry.practiceId,
+      )).map((metric) => metric.id);
+      const suppliedMetricIds = new Set(Object.keys(entry.metricValues));
+      for (const metricId of activeMetricIds) {
+        if (!suppliedMetricIds.has(metricId)) {
+          await upsertMetricValue(actualEntryId, { metricId });
+        }
+      }
 
       for (const value of Object.values(entry.metricValues)) {
         await upsertMetricValue(actualEntryId, value);
       }
       for (const blockerId of entry.blockerIds) {
         await db.runAsync(
-          'INSERT OR IGNORE INTO entry_blockers (entry_id, blocker_id) VALUES (?, ?)',
+          `INSERT INTO entry_blockers (entry_id, blocker_id, enabled)
+           VALUES (?, ?, 1)
+           ON CONFLICT(entry_id, blocker_id) DO UPDATE SET
+            enabled = 1,
+            updated_at = CURRENT_TIMESTAMP`,
           actualEntryId,
           blockerId,
         );
@@ -690,7 +707,7 @@ export async function getRoutinesWithSchedules(selectedDate: string) {
     priority: number;
     active: number;
   }>(
-    'SELECT id, name, description, routine_type, priority, active FROM routine_templates ORDER BY priority, name',
+    'SELECT id, name, description, routine_type, priority, active FROM routine_templates WHERE deleted_at IS NULL ORDER BY priority, name',
   );
   const schedules = await db.getAllAsync<{
     id: string;
@@ -699,7 +716,7 @@ export async function getRoutinesWithSchedules(selectedDate: string) {
     end_date: string | null;
     days_of_week: string;
     active: number;
-  }>('SELECT * FROM routine_schedules ORDER BY routine_template_id');
+  }>('SELECT * FROM routine_schedules WHERE active = 1 ORDER BY routine_template_id');
   const exceptions = await db.getAllAsync<{
     routine_template_id: string;
     action: string;
@@ -732,6 +749,8 @@ export async function createRoutine(input: {
   endDate?: string | null;
   daysOfWeek: number[];
 }) {
+  validateScheduleRange(input.startDate, input.endDate);
+  validateScheduleDays(input.daysOfWeek);
   const db = await getDb();
   const routineId = makeId('routine');
   const maxPriority = await db.getFirstAsync<{ max_priority: number | null }>(
@@ -763,7 +782,7 @@ export async function createRoutine(input: {
 export async function updateRoutine(input: { id: string; name: string; description?: string | null; active: boolean }) {
   const db = await getDb();
   await db.runAsync(
-    'UPDATE routine_templates SET name = ?, description = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE routine_templates SET name = ?, description = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL',
     input.name.trim(),
     input.description?.trim() || null,
     input.active ? 1 : 0,
@@ -777,10 +796,24 @@ export async function deleteRoutine(routineId: string) {
   }
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM routine_exceptions WHERE routine_template_id = ?', routineId);
-    await db.runAsync('DELETE FROM routine_schedules WHERE routine_template_id = ?', routineId);
-    await db.runAsync('DELETE FROM routine_practices WHERE routine_template_id = ?', routineId);
-    await db.runAsync('DELETE FROM routine_templates WHERE id = ?', routineId);
+    const today = todayIsoDate();
+    await db.runAsync(
+      'UPDATE routine_templates SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      routineId,
+    );
+    await db.runAsync(
+      'UPDATE routine_schedules SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE routine_template_id = ?',
+      routineId,
+    );
+    await db.runAsync(
+      `UPDATE routine_practices
+       SET enabled = 0,
+        archived_from = COALESCE(archived_from, ?),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE routine_template_id = ?`,
+      today,
+      routineId,
+    );
   });
 }
 
@@ -790,6 +823,8 @@ export async function addRoutineSchedule(input: {
   endDate?: string | null;
   daysOfWeek: number[];
 }) {
+  validateScheduleRange(input.startDate, input.endDate);
+  validateScheduleDays(input.daysOfWeek);
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO routine_schedules (id, routine_template_id, start_date, end_date, days_of_week, active)
@@ -804,19 +839,23 @@ export async function addRoutineSchedule(input: {
 
 export async function deleteRoutineSchedule(scheduleId: string) {
   const db = await getDb();
-  await db.runAsync('DELETE FROM routine_schedules WHERE id = ?', scheduleId);
+  await db.runAsync(
+    'UPDATE routine_schedules SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    scheduleId,
+  );
 }
 
 export async function toggleRoutineActive(routineId: string, active: boolean) {
   const db = await getDb();
   await db.runAsync(
-    'UPDATE routine_templates SET active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE routine_templates SET active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL',
     active ? 1 : 0,
     routineId,
   );
 }
 
 export async function updateScheduleDays(scheduleId: string, daysOfWeek: number[]) {
+  validateScheduleDays(daysOfWeek);
   const db = await getDb();
   await db.runAsync(
     'UPDATE routine_schedules SET days_of_week = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -826,6 +865,7 @@ export async function updateScheduleDays(scheduleId: string, daysOfWeek: number[
 }
 
 export async function updateScheduleDates(scheduleId: string, startDate: string | null, endDate: string | null) {
+  validateScheduleRange(startDate, endDate);
   const db = await getDb();
   await db.runAsync(
     'UPDATE routine_schedules SET start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
@@ -861,7 +901,7 @@ export async function getTaskFormOptions() {
   const db = await getDb();
   const [domains, routines, reviewSections, blockers] = await Promise.all([
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM domains WHERE active = 1 ORDER BY sort_order'),
-    db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM routine_templates ORDER BY active DESC, priority, name'),
+    db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM routine_templates WHERE deleted_at IS NULL ORDER BY active DESC, priority, name'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM review_sections WHERE active = 1 ORDER BY sort_order'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM blockers WHERE active = 1 ORDER BY name'),
   ]);
@@ -1076,12 +1116,6 @@ export async function updateTask(input: {
       );
     }
     await replacePracticeBlockers(db, input.practiceId, input.blockerIds);
-    if (!input.allowNote) {
-      await db.runAsync('UPDATE daily_entries SET note = NULL, updated_at = CURRENT_TIMESTAMP WHERE practice_id = ?', input.practiceId);
-    }
-    if (!input.markable) {
-      await db.runAsync('UPDATE daily_entries SET remind_tomorrow = 0, updated_at = CURRENT_TIMESTAMP WHERE practice_id = ?', input.practiceId);
-    }
   });
 }
 
@@ -1178,6 +1212,21 @@ function normalizeWeeklyTarget(value: number | null | undefined) {
   return Math.min(7, rounded);
 }
 
+function validateScheduleRange(startDate?: string | null, endDate?: string | null) {
+  const start = startDate?.trim() || null;
+  const end = endDate?.trim() || null;
+  if (start && !isIsoDate(start)) throw new Error('Enter the start date as YYYY-MM-DD.');
+  if (end && !isIsoDate(end)) throw new Error('Enter the end date as YYYY-MM-DD.');
+  if (start && end && start > end) throw new Error('The start date must be on or before the end date.');
+}
+
+function validateScheduleDays(daysOfWeek: number[]) {
+  if (!daysOfWeek.length) throw new Error('Select at least one day of the week.');
+  if (daysOfWeek.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+    throw new Error('The routine includes an invalid day of the week.');
+  }
+}
+
 export async function moveTaskWithinReviewSection(routinePracticeId: string, direction: 'up' | 'down') {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
@@ -1249,14 +1298,19 @@ export async function getReviewStatusMap(startDate: string, endDate: string) {
 }
 
 export async function getCurrentReviewStreak() {
-  const savedDates = await getReviewStatusMap(addDaysIso(todayIsoDate(), -365), todayIsoDate());
-  let streak = 0;
-  let cursor = savedDates.has(todayIsoDate()) ? todayIsoDate() : addDaysIso(todayIsoDate(), -1);
-  while (savedDates.has(cursor)) {
-    streak += 1;
-    cursor = addDaysIso(cursor, -1);
-  }
-  return streak;
+  const db = await getDb();
+  const today = todayIsoDate();
+  const rows = await db.getAllAsync<{ review_date: string }>(
+    `SELECT review_date
+     FROM daily_review_sessions
+     WHERE user_id = ?
+      AND review_date <= ?
+      AND completed_at IS NOT NULL
+     ORDER BY review_date DESC`,
+    LOCAL_USER_ID,
+    today,
+  );
+  return calculateReviewStreak(rows.map((row) => row.review_date), today);
 }
 
 export async function getDomainEditorRows() {
@@ -1466,6 +1520,7 @@ export async function exportReadableData() {
        JOIN practices p ON p.id = rp.practice_id
        JOIN review_sections rs ON rs.id = rp.review_section_id
        WHERE rp.archived_from IS NULL
+        AND rt.deleted_at IS NULL
        ORDER BY rt.priority, rt.name, rs.sort_order, rp.sort_order, p.name`,
     ),
     db.getAllAsync<{
@@ -1517,6 +1572,7 @@ export async function exportReadableData() {
           FROM entry_blockers eb
           JOIN blockers b ON b.id = eb.blocker_id
           WHERE eb.entry_id = de.id
+           AND eb.enabled = 1
         ) as blockers
        FROM daily_entries de
        JOIN practices p ON p.id = de.practice_id
@@ -1731,7 +1787,6 @@ export async function importAllData(exportJson: string) {
       }
     });
     await normalizeQualityScale(db);
-    await normalizeReviewCompletionState(db);
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
