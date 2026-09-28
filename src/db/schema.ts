@@ -239,7 +239,6 @@ CREATE TABLE IF NOT EXISTS app_preferences (
 
 CREATE INDEX IF NOT EXISTS idx_practices_user_id ON practices(user_id);
 CREATE INDEX IF NOT EXISTS idx_practices_domain_id ON practices(domain_id);
-CREATE INDEX IF NOT EXISTS idx_practices_parent_id ON practices(parent_practice_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_practice_id ON metrics(practice_id);
 CREATE INDEX IF NOT EXISTS idx_metric_options_metric_id ON metric_options(metric_id);
 CREATE INDEX IF NOT EXISTS idx_routine_schedules_routine_id ON routine_schedules(routine_template_id);

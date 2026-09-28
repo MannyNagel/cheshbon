@@ -43,6 +43,7 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'practices', 'weekly_target', 'INTEGER');
   await ensureColumn(db, 'practices', 'parent_practice_id', 'TEXT');
   await ensureColumn(db, 'practices', 'parent_sort_order', 'INTEGER NOT NULL DEFAULT 0');
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_practices_parent_id ON practices(parent_practice_id);');
   await ensureColumn(db, 'daily_entries', 'remind_tomorrow', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'entry_blockers', 'enabled', 'INTEGER NOT NULL DEFAULT 1');
   await ensureColumn(db, 'entry_blockers', 'updated_at', 'TEXT');
