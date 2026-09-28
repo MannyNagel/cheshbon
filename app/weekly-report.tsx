@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { colors, spacing } from '@/src/components/ui';
 import { emailWeeklyReportToSelf } from '@/src/services/emailService';
+import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import {
   exportWeeklyReportMarkdown,
   formatWeeklyReportData,
@@ -61,10 +62,23 @@ export default function WeeklyReportScreen() {
     try {
       const nextReport = await generateWeeklyReport(data);
       await saveWeeklyReport(nextReport, data);
+      let syncedAt: string | null = null;
+      let syncError: string | null = null;
+      try {
+        syncedAt = await pushLocalDataToCloudIfSignedIn();
+      } catch (error) {
+        syncError = error instanceof Error ? error.message : 'Cloud backup failed.';
+      }
       setReport(nextReport);
       setSelectedWeekStart(data.weekStart);
       setSavedReports(await getSavedWeeklyReports());
-      setMessage('Weekly report generated and saved.');
+      setMessage(
+        syncedAt
+          ? 'Weekly report generated, saved, and backed up.'
+          : syncError
+            ? `Weekly report saved locally. Cloud backup will retry with your next saved change: ${syncError}`
+            : 'Weekly report generated and saved.',
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not generate weekly report.');
     } finally {

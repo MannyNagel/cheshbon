@@ -183,6 +183,9 @@ export default function SettingsScreen() {
           {cloudStatus.lastSyncedAt ? (
             <Text style={styles.cloudMeta}>Last cloud backup: {formatDateTime(cloudStatus.lastSyncedAt)}</Text>
           ) : null}
+          {cloudStatus.signedIn ? (
+            <Text style={styles.cloudMeta}>Saved changes upload automatically. Use the buttons below only when you want to force a backup or restore.</Text>
+          ) : null}
         </View>
 
         {cloudStatus.signedIn ? (
@@ -190,13 +193,13 @@ export default function SettingsScreen() {
             <ActionButton
               disabled={busy}
               icon={<CloudUpload color={colors.ink} size={17} />}
-              label="Push to cloud"
+              label="Back up now"
               onPress={() => runCloudAction(pushLocalDataToCloud, 'Cloud backup saved:')}
             />
             <ActionButton
               disabled={busy}
               icon={<CloudDownload color={colors.ink} size={17} />}
-              label="Pull from cloud"
+              label="Restore now"
               onPress={() => runCloudAction(pullCloudDataToLocal, 'Cloud backup restored:')}
             />
             <ActionButton
@@ -254,7 +257,7 @@ export default function SettingsScreen() {
                 label={authMode === 'signIn' ? 'Sign in' : 'Create account'}
                 onPress={() =>
                   authMode === 'signIn'
-                    ? runCloudAction(() => signInToCloud(email, password), 'Signed in and refreshed.')
+                    ? runCloudAction(() => signInToCloud(email, password), 'Signed in. Restoring your cloud data...')
                     : runCloudAction(
                         () => signUpForCloud(fullName, email, password),
                         'Account created. Check email if confirmation is required.',

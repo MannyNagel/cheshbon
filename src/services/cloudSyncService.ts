@@ -2,9 +2,16 @@ import { resetDatabaseToSeedDefaults } from '@/src/db/client';
 import { exportAllData, importAllData } from '@/src/repositories/cheshbonRepo';
 import { mergeCloudSnapshots, type SnapshotPayload } from '@/src/services/cloudSnapshotMerge';
 import { isSupabaseConfigured, supabase } from '@/src/services/supabaseClient';
+import { createSerializedRetryQueue } from '@/src/services/syncQueue';
 
 const productionAppOrigin = 'https://dailycheshbon.com';
 const legacyProductionHosts = new Set(['cheshbon.vercel.app', 'www.cheshbon.vercel.app']);
+const enqueueCloudSync = createSerializedRetryQueue({
+  attempts: 3,
+  delaysMs: [300, 900],
+  shouldRetry: isRetryableCloudSyncError,
+});
+let lastAutomaticPull: { userId: string; syncedAt: string; completedAt: number } | null = null;
 
 export type CloudStatus = {
   configured: boolean;
@@ -60,7 +67,6 @@ export async function signInToCloud(email: string, password: string) {
   const client = requireSupabase();
   const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;
-  return pullCloudDataToLocalIfAvailable();
 }
 
 export async function signUpForCloud(name: string, email: string, password: string) {
@@ -146,35 +152,40 @@ export async function completeOAuthRedirectIfPresent() {
 }
 
 export async function signOutOfCloud() {
-  const client = requireSupabase();
-  const { error } = await client.auth.signOut();
-  if (error) throw error;
-  await resetDatabaseToSeedDefaults();
+  await enqueueCloudSync(async () => {
+    const client = requireSupabase();
+    const { error } = await client.auth.signOut();
+    if (error) throw error;
+    await resetDatabaseToSeedDefaults();
+  });
   if (typeof window !== 'undefined') {
     window.location.assign('/');
   }
 }
 
 export async function pushLocalDataToCloud() {
-  const client = requireSupabase();
-  const user = await requireUser();
-  return pushLocalDataForUser(client, user.id);
+  return enqueueCloudSync(async () => {
+    const client = requireSupabase();
+    const user = await requireUser();
+    return pushLocalDataForUser(client, user.id);
+  });
 }
 
 export async function pushLocalDataToCloudIfSignedIn() {
-  if (!isSupabaseConfigured || !supabase) return null;
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-  const userId = data.session?.user.id;
-  if (!userId) return null;
-  return pushLocalDataForUser(supabase, userId);
+  return enqueueCloudSync(async () => {
+    if (!isSupabaseConfigured || !supabase) return null;
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    const userId = data.session?.user.id;
+    if (!userId) return null;
+    return pushLocalDataForUser(supabase, userId);
+  });
 }
 
 async function pushLocalDataForUser(client: NonNullable<typeof supabase>, userId: string) {
   const localSnapshot = JSON.parse(await exportAllData()) as SnapshotPayload;
   const cloudSnapshot = await getCloudSnapshotForUser(client, userId);
   const snapshot = mergeCloudSnapshots(localSnapshot, cloudSnapshot.snapshot);
-  await importAllData(JSON.stringify(snapshot));
   const now = new Date().toISOString();
   const { error } = await client.from('cloud_snapshots').upsert(
     {
@@ -189,20 +200,29 @@ async function pushLocalDataForUser(client: NonNullable<typeof supabase>, userId
 }
 
 export async function pullCloudDataToLocal() {
-  const client = requireSupabase();
-  const user = await requireUser();
-  const syncedAt = await pullCloudDataForUser(client, user.id);
-  if (!syncedAt) throw new Error('No cloud backup found for this account yet.');
-  return syncedAt;
+  return enqueueCloudSync(async () => {
+    const client = requireSupabase();
+    const user = await requireUser();
+    const syncedAt = await pullCloudDataForUser(client, user.id);
+    if (!syncedAt) throw new Error('No cloud backup found for this account yet.');
+    return syncedAt;
+  });
 }
 
 export async function pullCloudDataToLocalIfAvailable() {
-  if (!isSupabaseConfigured || !supabase) return null;
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const userId = sessionData.session?.user.id;
-  if (!userId) return null;
-  return pullCloudDataForUser(supabase, userId);
+  return enqueueCloudSync(async () => {
+    if (!isSupabaseConfigured || !supabase) return null;
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    const userId = sessionData.session?.user.id;
+    if (!userId) return null;
+    if (lastAutomaticPull?.userId === userId && Date.now() - lastAutomaticPull.completedAt < 5000) {
+      return lastAutomaticPull.syncedAt;
+    }
+    const syncedAt = await pullCloudDataForUser(supabase, userId);
+    if (syncedAt) lastAutomaticPull = { userId, syncedAt, completedAt: Date.now() };
+    return syncedAt;
+  });
 }
 
 async function pullCloudDataForUser(client: NonNullable<typeof supabase>, userId: string) {
@@ -211,7 +231,6 @@ async function pullCloudDataForUser(client: NonNullable<typeof supabase>, userId
   try {
     const localSnapshot = JSON.parse(await exportAllData()) as SnapshotPayload;
     const snapshot = mergeCloudSnapshots(localSnapshot, cloudSnapshot.snapshot);
-    await importAllData(JSON.stringify(snapshot));
     const now = new Date().toISOString();
     const { error } = await client.from('cloud_snapshots').upsert(
       {
@@ -222,6 +241,7 @@ async function pullCloudDataForUser(client: NonNullable<typeof supabase>, userId
       { onConflict: 'user_id' },
     );
     if (error) throw error;
+    await importAllData(JSON.stringify(snapshot));
     return now;
   } catch (importError) {
     throw new Error(importError instanceof Error ? `Cloud restore failed: ${importError.message}` : 'Cloud restore failed.');
@@ -304,4 +324,9 @@ async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message
 function getUserDisplayName(metadata: Record<string, unknown> | null | undefined) {
   const name = metadata?.full_name ?? metadata?.name;
   return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+function isRetryableCloudSyncError(error: unknown) {
+  const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+  return !/invalid login|email not confirmed|sign in before|no cloud backup|not configured|row level security|permission denied|invalid jwt/i.test(message);
 }

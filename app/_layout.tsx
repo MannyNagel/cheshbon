@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { colors } from '@/src/components/ui';
 import { initializeDatabase } from '@/src/db/client';
+import { pullCloudDataToLocalIfAvailable } from '@/src/services/cloudSyncService';
 import { scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 export default function RootLayout() {
@@ -13,13 +14,23 @@ export default function RootLayout() {
 
   useEffect(() => {
     let mounted = true;
+    let reloadScheduled = false;
     initializeDatabase()
+      .then(async () => {
+        try {
+          await pullCloudDataToLocalIfAvailable();
+        } catch (error) {
+          reloadScheduled = scheduleAccessHandleBusyReload(error);
+          if (!reloadScheduled) console.warn('Automatic cloud restore failed.', error);
+        }
+      })
       .catch((error) => {
-        if (scheduleAccessHandleBusyReload(error)) return;
+        reloadScheduled = scheduleAccessHandleBusyReload(error);
+        if (reloadScheduled) return;
         console.error(error);
       })
       .finally(() => {
-        if (mounted) setReady(true);
+        if (mounted && !reloadScheduled) setReady(true);
       });
     return () => {
       mounted = false;
