@@ -20,7 +20,7 @@ export default function TrendsScreen() {
   const [sortBy, setSortBy] = useState<SortBy>('domain');
   const [domainFilter, setDomainFilter] = useState<string>('all');
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
-  const [selectedPracticeIds, setSelectedPracticeIds] = useState<string[]>([]);
+  const [selectedMetricIds, setSelectedMetricIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,10 +46,10 @@ export default function TrendsScreen() {
 
   const selectedPractices = useMemo(() => {
     if (!summary) return [];
-    return selectedPracticeIds
-      .map((practiceId) => summary.practiceTrends.find((practice) => practice.practiceId === practiceId))
+    return selectedMetricIds
+      .map((metricId) => summary.practiceTrends.find((practice) => practice.metricId === metricId))
       .filter((practice): practice is TrendSummary['practiceTrends'][number] => practice != null);
-  }, [selectedPracticeIds, summary]);
+  }, [selectedMetricIds, summary]);
   const domainChoices = useMemo(() => {
     if (!summary) return [];
     const map = new Map<string, { domainId: string; domainName: string }>();
@@ -62,8 +62,8 @@ export default function TrendsScreen() {
     return [...map.values()].sort((a, b) => a.domainName.localeCompare(b.domainName));
   }, [summary]);
 
-  function togglePractice(practiceId: string) {
-    setSelectedPracticeIds((current) => current.includes(practiceId) ? current.filter((id) => id !== practiceId) : [...current, practiceId]);
+  function togglePractice(metricId: string) {
+    setSelectedMetricIds((current) => current.includes(metricId) ? current.filter((id) => id !== metricId) : [...current, metricId]);
   }
 
   async function setWeekMode(weekMode: TrendWeekMode) {
@@ -171,6 +171,7 @@ export default function TrendsScreen() {
             <FilterChip label="Quality" selected={kindFilter === 'quality'} onPress={() => setKindFilter('quality')} />
             <FilterChip label="Complete" selected={kindFilter === 'complete'} onPress={() => setKindFilter('complete')} />
             <FilterChip label="Number" selected={kindFilter === 'number'} onPress={() => setKindFilter('number')} />
+            <FilterChip label="Choices" selected={kindFilter === 'choice'} onPress={() => setKindFilter('choice')} />
             <FilterChip label="Text" selected={kindFilter === 'text'} onPress={() => setKindFilter('text')} />
           </ChipRow>
 
@@ -185,18 +186,20 @@ export default function TrendsScreen() {
             {filteredPractices.map((practice) => (
               <Pressable
                 accessibilityRole="button"
-                key={practice.practiceId}
-                onPress={() => togglePractice(practice.practiceId)}
-                style={[styles.practiceChip, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipSelected]}
+                key={practice.metricId}
+                onPress={() => togglePractice(practice.metricId)}
+                style={[styles.practiceChip, selectedMetricIds.includes(practice.metricId) && styles.practiceChipSelected]}
               >
-                <Text style={[styles.practiceChipText, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipTextSelected]}>{practice.practiceName}</Text>
-                <Text style={[styles.practiceChipMeta, selectedPracticeIds.includes(practice.practiceId) && styles.practiceChipTextSelected]}>{practice.domainName} | {kindLabel(practice.metricKind)}</Text>
+                <Text style={[styles.practiceChipText, selectedMetricIds.includes(practice.metricId) && styles.practiceChipTextSelected]}>
+                  {practice.isSubPractice ? `${practice.practiceName}: ${practice.metricName}` : practice.practiceName}
+                </Text>
+                <Text style={[styles.practiceChipMeta, selectedMetricIds.includes(practice.metricId) && styles.practiceChipTextSelected]}>{practice.domainName} | {kindLabel(practice.metricKind)}</Text>
               </Pressable>
             ))}
           </View>
 
-          {selectedPracticeIds.length ? (
-            <Pressable accessibilityRole="button" onPress={() => setSelectedPracticeIds([])} style={styles.resetButton}>
+          {selectedMetricIds.length ? (
+            <Pressable accessibilityRole="button" onPress={() => setSelectedMetricIds([])} style={styles.resetButton}>
               <Text style={styles.resetText}>Clear selected</Text>
             </Pressable>
           ) : null}
@@ -206,7 +209,7 @@ export default function TrendsScreen() {
       <Section title="Selected Practices">
         {selectedPractices.length ? (
           <View style={styles.practiceList}>
-            {selectedPractices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} weekLabel={summary.weekLabel} />)}
+            {selectedPractices.map((practice) => <TrendPracticeCard key={practice.metricId} practice={practice} weekLabel={summary.weekLabel} />)}
           </View>
         ) : (
           <Empty text="Select one or more practice chips to see weekly, monthly, and all-time stats. Text practices show recent entries." />
@@ -283,6 +286,7 @@ function formatScore(value: number | null) {
 function kindLabel(kind: TrendSummary['practiceTrends'][number]['metricKind']) {
   if (kind === 'complete') return 'complete';
   if (kind === 'number') return 'number';
+  if (kind === 'choice') return 'choices';
   if (kind === 'text') return 'text';
   return 'quality';
 }

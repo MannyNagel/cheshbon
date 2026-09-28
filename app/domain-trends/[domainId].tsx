@@ -61,7 +61,7 @@ export default function DomainTrendsScreen() {
 
       <View style={styles.practiceList}>
         {practices.length ? (
-          practices.map((practice) => <TrendPracticeCard key={`${practice.practiceId}-${practice.metricName}`} practice={practice} weekLabel={summary.weekLabel} />)
+          practices.map((practice) => <TrendPracticeCard key={practice.metricId} practice={practice} weekLabel={summary.weekLabel} />)
         ) : (
           <Text style={styles.empty}>No practice stats found for this domain yet.</Text>
         )}

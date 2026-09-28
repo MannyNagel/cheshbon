@@ -141,11 +141,13 @@ export type TrendSummary = {
   }>;
   practiceTrends: Array<{
     practiceId: string;
+    metricId: string;
     practiceName: string;
     domainId: string;
     domainName: string;
     metricName: string;
-    metricKind: 'complete' | 'number' | 'quality' | 'text';
+    isSubPractice: boolean;
+    metricKind: 'choice' | 'complete' | 'number' | 'quality' | 'text';
     unitLabel: string;
     week: TrendWindow;
     month: TrendWindow;

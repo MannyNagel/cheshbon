@@ -31,6 +31,17 @@ type MetricRow = {
 };
 type MetricOptionRow = { id: string; metric_id: string; label: string; value: string; sort_order: number };
 
+export type EditablePracticeMetric = {
+  id?: string | null;
+  name: string;
+  metricType: Metric['metricType'];
+  options?: Array<{
+    id?: string | null;
+    label: string;
+    value?: string | null;
+  }>;
+};
+
 export type ReminderPreferences = {
   taskRemindersEnabled: boolean;
   morningReminderEnabled: boolean;
@@ -957,19 +968,59 @@ export async function getTasksForManagement() {
   );
   const practiceIds = [...new Set(rows.map((row) => row.practiceId))];
   const metricRows = practiceIds.length
-    ? await db.getAllAsync<{ id: string; practice_id: string; name: string; metric_type: Metric['metricType']; sort_order: number }>(
-        `SELECT id, practice_id, name, metric_type, sort_order
+    ? await db.getAllAsync<{
+        id: string;
+        practice_id: string;
+        name: string;
+        metric_type: Metric['metricType'];
+        scale_min: number | null;
+        scale_max: number | null;
+        sort_order: number;
+      }>(
+        `SELECT id, practice_id, name, metric_type, scale_min, scale_max, sort_order
          FROM metrics
          WHERE active = 1 AND practice_id IN (${practiceIds.map(() => '?').join(',')})
          ORDER BY sort_order`,
         practiceIds,
       )
     : [];
-  const firstMetricByPractice = new Map<string, (typeof metricRows)[number]>();
+  const metricIds = metricRows.map((metric) => metric.id);
+  const optionRows = metricIds.length
+    ? await db.getAllAsync<MetricOptionRow & { active: number }>(
+        `SELECT id, metric_id, label, value, sort_order, active
+         FROM metric_options
+         WHERE active = 1 AND metric_id IN (${metricIds.map(() => '?').join(',')})
+         ORDER BY sort_order`,
+        metricIds,
+      )
+    : [];
+  const optionsByMetric = new Map<string, Array<{ id: string; label: string; value: string }>>();
+  for (const option of optionRows) {
+    const list = optionsByMetric.get(option.metric_id) ?? [];
+    list.push({ id: option.id, label: option.label, value: option.value });
+    optionsByMetric.set(option.metric_id, list);
+  }
+  const metricsByPractice = new Map<string, Array<{
+    id: string;
+    name: string;
+    metricType: Metric['metricType'];
+    scaleMin: number | null;
+    scaleMax: number | null;
+    sortOrder: number;
+    options: Array<{ id: string; label: string; value: string }>;
+  }>>();
   for (const metric of metricRows) {
-    if (!firstMetricByPractice.has(metric.practice_id)) {
-      firstMetricByPractice.set(metric.practice_id, metric);
-    }
+    const list = metricsByPractice.get(metric.practice_id) ?? [];
+    list.push({
+      id: metric.id,
+      name: metric.name,
+      metricType: metric.metric_type,
+      scaleMin: metric.scale_min,
+      scaleMax: metric.scale_max,
+      sortOrder: metric.sort_order,
+      options: optionsByMetric.get(metric.id) ?? [],
+    });
+    metricsByPractice.set(metric.practice_id, list);
   }
   const blockerRows = practiceIds.length
     ? await db.getAllAsync<{ practice_id: string; blocker_id: string; enabled: number }>(
@@ -989,9 +1040,7 @@ export async function getTasksForManagement() {
   }
   return rows.map((row) => ({
     ...row,
-    metricId: firstMetricByPractice.get(row.practiceId)?.id ?? null,
-    metricName: firstMetricByPractice.get(row.practiceId)?.name ?? null,
-    metricType: firstMetricByPractice.get(row.practiceId)?.metric_type ?? null,
+    metrics: metricsByPractice.get(row.practiceId) ?? [],
     blockerIds: blockersByPractice.get(row.practiceId) ?? [],
     blockersConfigured: customizedBlockerPractices.has(row.practiceId) ? 1 : 0,
     protectedFromRemoval: isHomeFunctionPractice({ id: row.practiceId, name: row.name, domainId: row.domainId }) ? 1 : 0,
@@ -1036,13 +1085,12 @@ export async function getRoutineTasks(routineId: string) {
 export async function updateTask(input: {
   routinePracticeId: string;
   practiceId: string;
-  metricId?: string | null;
   name: string;
   description?: string | null;
   domainId: string;
   routineId: string;
   reviewSectionId: string;
-  metricKind: 'completed' | 'quality' | 'number' | 'text';
+  metrics: EditablePracticeMetric[];
   enabled: boolean;
   allowNote: boolean;
   markable: boolean;
@@ -1050,14 +1098,7 @@ export async function updateTask(input: {
   blockerIds?: string[];
 }) {
   const db = await getDb();
-  const metric =
-    input.metricKind === 'completed'
-      ? { name: 'Completed', type: 'boolean', min: null, max: null }
-      : input.metricKind === 'quality'
-        ? { name: 'Quality', type: 'scale', min: 1, max: 5 }
-        : input.metricKind === 'number'
-          ? { name: 'Number', type: 'number', min: null, max: null }
-          : { name: 'Text', type: 'text', min: null, max: null };
+  if (!input.metrics.length) throw new Error('A practice needs a primary metric.');
   const currentPlacement = await db.getFirstAsync<{
     routine_template_id: string;
     review_section_id: string;
@@ -1090,31 +1131,7 @@ export async function updateTask(input: {
       input.enabled ? 1 : 0,
       input.routinePracticeId,
     );
-    if (input.metricId) {
-      await db.runAsync(
-        `UPDATE metrics
-         SET name = ?, metric_type = ?, scale_min = ?, scale_max = ?, required = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-        metric.name,
-        metric.type,
-        metric.min,
-        metric.max,
-        0,
-        input.metricId,
-      );
-    } else {
-      await db.runAsync(
-        `INSERT INTO metrics (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-        makeId('metric'),
-        input.practiceId,
-        metric.name,
-        metric.type,
-        metric.min,
-        metric.max,
-        0,
-      );
-    }
+    await replacePracticeMetrics(db, input.practiceId, input.metrics);
     await replacePracticeBlockers(db, input.practiceId, input.blockerIds);
   });
 }
@@ -1125,7 +1142,7 @@ export async function createTask(input: {
   domainId: string;
   routineId: string;
   reviewSectionId: string;
-  metricKind: 'completed' | 'quality' | 'number' | 'text';
+  metrics: EditablePracticeMetric[];
   enabled?: boolean;
   allowNote: boolean;
   markable: boolean;
@@ -1133,19 +1150,10 @@ export async function createTask(input: {
   blockerIds?: string[];
 }) {
   const db = await getDb();
+  if (!input.metrics.length) throw new Error('A practice needs a primary metric.');
   const practiceId = makeId('practice');
-  const metricId = makeId('metric');
   const routinePracticeId = makeId('routine_practice');
   const sortOrder = await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
-  const metric =
-    input.metricKind === 'completed'
-      ? { name: 'Completed', type: 'boolean', min: null, max: null }
-      : input.metricKind === 'quality'
-        ? { name: 'Quality', type: 'scale', min: 1, max: 5 }
-        : input.metricKind === 'number'
-          ? { name: 'Number', type: 'number', min: null, max: null }
-          : { name: 'Text', type: 'text', min: null, max: null };
-
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       'INSERT INTO practices (id, user_id, domain_id, name, description, allow_note, markable, weekly_target) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -1158,17 +1166,7 @@ export async function createTask(input: {
       input.markable ? 1 : 0,
       normalizeWeeklyTarget(input.weeklyTarget),
     );
-    await db.runAsync(
-      `INSERT INTO metrics (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
-      metricId,
-      practiceId,
-      metric.name,
-      metric.type,
-      metric.min,
-      metric.max,
-      0,
-    );
+    await replacePracticeMetrics(db, practiceId, input.metrics);
     await db.runAsync(
       `INSERT INTO routine_practices
         (id, routine_template_id, practice_id, review_section_id, sort_order, required, enabled)
@@ -1183,6 +1181,126 @@ export async function createTask(input: {
     );
     await replacePracticeBlockers(db, practiceId, input.blockerIds);
   });
+}
+
+async function replacePracticeMetrics(
+  db: Awaited<ReturnType<typeof getDb>>,
+  practiceId: string,
+  metrics: EditablePracticeMetric[],
+) {
+  const existing = await db.getAllAsync<{ id: string }>('SELECT id FROM metrics WHERE practice_id = ?', practiceId);
+  const existingIds = new Set(existing.map((metric) => metric.id));
+  const retainedIds: string[] = [];
+
+  for (const [index, input] of metrics.entries()) {
+    const name = input.name.trim();
+    if (!name) throw new Error(index === 0 ? 'Primary metric name is required.' : 'Every sub-practice needs a name.');
+    const metricId = input.id && existingIds.has(input.id) ? input.id : makeId('metric');
+    const min = input.metricType === 'scale' ? 1 : null;
+    const max = input.metricType === 'scale' ? 5 : null;
+    if (existingIds.has(metricId)) {
+      await db.runAsync(
+        `UPDATE metrics
+         SET name = ?, metric_type = ?, scale_min = ?, scale_max = ?, required = 0,
+           sort_order = ?, active = 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND practice_id = ?`,
+        name,
+        input.metricType,
+        min,
+        max,
+        index,
+        metricId,
+        practiceId,
+      );
+    } else {
+      await db.runAsync(
+        `INSERT INTO metrics
+          (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order, active)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1)`,
+        metricId,
+        practiceId,
+        name,
+        input.metricType,
+        min,
+        max,
+        index,
+      );
+    }
+    retainedIds.push(metricId);
+    await replaceMetricOptions(db, metricId, input.metricType === 'enum' ? input.options ?? [] : []);
+  }
+
+  const removedIds = [...existingIds].filter((id) => !retainedIds.includes(id));
+  if (removedIds.length) {
+    await db.runAsync(
+      `UPDATE metrics SET active = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE practice_id = ? AND id IN (${removedIds.map(() => '?').join(',')})`,
+      practiceId,
+      ...removedIds,
+    );
+  }
+}
+
+async function replaceMetricOptions(
+  db: Awaited<ReturnType<typeof getDb>>,
+  metricId: string,
+  options: NonNullable<EditablePracticeMetric['options']>,
+) {
+  const existing = await db.getAllAsync<{ id: string }>('SELECT id FROM metric_options WHERE metric_id = ?', metricId);
+  const existingIds = new Set(existing.map((option) => option.id));
+  const retainedIds: string[] = [];
+  const usedValues = new Set<string>();
+
+  for (const [index, option] of options.entries()) {
+    const label = option.label.trim();
+    if (!label) continue;
+    const optionId = option.id && existingIds.has(option.id) ? option.id : makeId('metric_option');
+    const baseValue = option.value?.trim() || slugValue(label) || `option_${index + 1}`;
+    let value = baseValue;
+    let suffix = 2;
+    while (usedValues.has(value)) value = `${baseValue}_${suffix++}`;
+    usedValues.add(value);
+    if (existingIds.has(optionId)) {
+      await db.runAsync(
+        `UPDATE metric_options
+         SET label = ?, value = ?, sort_order = ?, active = 1, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND metric_id = ?`,
+        label,
+        value,
+        index + 1,
+        optionId,
+        metricId,
+      );
+    } else {
+      await db.runAsync(
+        `INSERT INTO metric_options (id, metric_id, label, value, sort_order, active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        optionId,
+        metricId,
+        label,
+        value,
+        index + 1,
+      );
+    }
+    retainedIds.push(optionId);
+  }
+
+  const removedIds = [...existingIds].filter((id) => !retainedIds.includes(id));
+  if (removedIds.length) {
+    await db.runAsync(
+      `UPDATE metric_options SET active = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE metric_id = ? AND id IN (${removedIds.map(() => '?').join(',')})`,
+      metricId,
+      ...removedIds,
+    );
+  }
+}
+
+function slugValue(label: string) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 export async function removeTaskFromTodayForward(routinePracticeId: string, fromDate = todayIsoDate()) {

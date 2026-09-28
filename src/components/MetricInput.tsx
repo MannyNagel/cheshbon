@@ -5,16 +5,17 @@ import type { Metric, MetricValueDraft } from '@/src/models/types';
 
 type Props = {
   metric: Metric;
+  subPractice?: boolean;
   value?: MetricValueDraft;
   onChange: (value: MetricValueDraft) => void;
 };
 
-export function MetricInput({ metric, value, onChange }: Props) {
+export function MetricInput({ metric, subPractice = false, value, onChange }: Props) {
   const baseValue: MetricValueDraft = value ?? { metricId: metric.id };
 
   if (metric.metricType === 'boolean') {
     return (
-      <MetricFrame metric={metric}>
+      <MetricFrame metric={metric} subPractice={subPractice}>
         <View style={styles.row}>
           <Choice
             label="Yes"
@@ -38,7 +39,7 @@ export function MetricInput({ metric, value, onChange }: Props) {
     const max = metric.scaleMax ?? 10;
     const numbers = Array.from({ length: max - min + 1 }, (_, index) => min + index);
     return (
-      <MetricFrame metric={metric}>
+      <MetricFrame metric={metric} subPractice={subPractice}>
         <View style={styles.scaleGrid}>
           {numbers.map((number) => (
             <Pressable
@@ -59,7 +60,7 @@ export function MetricInput({ metric, value, onChange }: Props) {
 
   if (metric.metricType === 'enum') {
     return (
-      <MetricFrame metric={metric}>
+      <MetricFrame metric={metric} subPractice={subPractice}>
         <View style={styles.wrap}>
           {metric.options.map((option) => (
             <Choice
@@ -75,7 +76,7 @@ export function MetricInput({ metric, value, onChange }: Props) {
   }
 
   return (
-    <MetricFrame metric={metric}>
+    <MetricFrame metric={metric} subPractice={subPractice}>
       <TextInput
         keyboardType={metric.metricType === 'number' ? 'numeric' : 'default'}
         multiline={metric.metricType === 'text'}
@@ -101,9 +102,9 @@ export function MetricInput({ metric, value, onChange }: Props) {
   );
 }
 
-function MetricFrame({ metric, children }: { metric: Metric; children: React.ReactNode }) {
+function MetricFrame({ metric, subPractice, children }: { metric: Metric; subPractice: boolean; children: React.ReactNode }) {
   return (
-    <View style={styles.metric}>
+    <View style={[styles.metric, subPractice && styles.subPractice]}>
       <Text style={styles.label}>
         {metric.name}
       </Text>
@@ -140,6 +141,11 @@ function Choice({
 const styles = StyleSheet.create({
   metric: {
     gap: spacing.sm,
+  },
+  subPractice: {
+    borderLeftColor: colors.blue,
+    borderLeftWidth: 3,
+    paddingLeft: spacing.md,
   },
   label: {
     color: colors.ink,

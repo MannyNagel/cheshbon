@@ -32,6 +32,8 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'daily_review_sessions', 'completed_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
+  await ensureColumn(db, 'metric_options', 'created_at', 'TEXT');
+  await ensureColumn(db, 'metric_options', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
   await ensureColumn(db, 'routine_templates', 'deleted_at', 'TEXT');
   await ensureColumn(db, 'practices', 'allow_note', 'INTEGER NOT NULL DEFAULT 1');

@@ -61,3 +61,29 @@ test('keeps a newer soft-deleted routine deleted', () => {
   assert.equal(merged.tables.routine_templates[0].active, 0);
   assert.equal(merged.tables.routine_templates[0].deleted_at, '2026-09-28T02:00:00.000Z');
 });
+
+test('keeps a newer removed sub-practice choice inactive', () => {
+  const cloud = snapshot({
+    metric_options: [{
+      id: 'option-1',
+      metric_id: 'metric-1',
+      label: 'Late',
+      value: 'late',
+      active: 1,
+      updated_at: '2026-09-28T01:00:00.000Z',
+    }],
+  });
+  const local = snapshot({
+    metric_options: [{
+      id: 'option-1',
+      metric_id: 'metric-1',
+      label: 'Late',
+      value: 'late',
+      active: 0,
+      updated_at: '2026-09-28T02:00:00.000Z',
+    }],
+  });
+
+  const merged = mergeCloudSnapshots(local, cloud);
+  assert.equal(merged.tables.metric_options[0].active, 0);
+});

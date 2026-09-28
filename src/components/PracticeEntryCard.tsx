@@ -111,6 +111,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
             key={metric.id}
             metric={metric}
             onChange={updateMetric}
+            subPractice={item.metrics.findIndex((candidate) => candidate.id === metric.id) > 0}
             value={entry.metricValues[metric.id]}
           />
         ))}

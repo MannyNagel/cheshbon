@@ -1,4 +1,4 @@
-import { CheckCircle2, Hash, MessageSquareText, Sparkles } from 'lucide-react-native';
+import { CheckCircle2, Hash, ListChecks, MessageSquareText, Sparkles } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
@@ -8,14 +8,15 @@ import { monthDay } from '@/src/utils/dates';
 type PracticeTrend = TrendSummary['practiceTrends'][number];
 
 export function TrendPracticeCard({ practice, weekLabel = 'Week' }: { practice: PracticeTrend; weekLabel?: string }) {
-  if (practice.metricKind === 'text') {
+  if (practice.metricKind === 'text' || practice.metricKind === 'choice') {
+    const isChoice = practice.metricKind === 'choice';
     return (
       <View style={styles.practiceCard}>
         <View style={styles.iconTitle}>
-          <MessageSquareText color={colors.blue} size={20} />
+          {isChoice ? <ListChecks color={colors.blue} size={20} /> : <MessageSquareText color={colors.blue} size={20} />}
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>{practice.practiceName}</Text>
-            <Text style={styles.rowMeta}>{practice.domainName} | recent entries</Text>
+            <Text style={styles.rowMeta}>{practice.domainName} | {practice.metricName} | {isChoice ? 'recent selections' : 'recent entries'}</Text>
           </View>
         </View>
         {practice.recentEntries.length ? (
@@ -28,7 +29,7 @@ export function TrendPracticeCard({ practice, weekLabel = 'Week' }: { practice: 
             ))}
           </View>
         ) : (
-          <Empty text="No recent text entries yet." />
+          <Empty text={isChoice ? 'No recent selections yet.' : 'No recent text entries yet.'} />
         )}
       </View>
     );

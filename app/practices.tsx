@@ -12,11 +12,20 @@ import {
   moveTaskWithinReviewSection,
   removeTaskFromTodayForward,
   updateTask,
+  type EditablePracticeMetric,
   type ReminderPreferences,
 } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 
-type MetricKind = 'completed' | 'quality' | 'number' | 'text';
+type MetricKind = 'completed' | 'quality' | 'number' | 'text' | 'choice';
+type MetricOptionDraft = { key: string; id: string | null; label: string; value: string | null };
+type PracticeMetricDraft = {
+  key: string;
+  id: string | null;
+  name: string;
+  metricKind: MetricKind;
+  options: MetricOptionDraft[];
+};
 type Options = {
   domains: Array<{ id: string; name: string }>;
   routines: Array<{ id: string; name: string }>;
@@ -37,9 +46,15 @@ type TaskRow = {
   routineName: string;
   reviewSectionId: string;
   reviewSectionName: string;
-  metricId: string | null;
-  metricName: string | null;
-  metricType: string | null;
+  metrics: Array<{
+    id: string;
+    name: string;
+    metricType: string;
+    scaleMin: number | null;
+    scaleMax: number | null;
+    sortOrder: number;
+    options: Array<{ id: string; label: string; value: string }>;
+  }>;
   enabled: number;
   sortOrder: number;
   archivedFrom: string | null;
@@ -53,15 +68,41 @@ const metricOptions: Array<{ id: MetricKind; label: string }> = [
   { id: 'quality', label: 'Quality 1-5' },
   { id: 'number', label: 'Number' },
   { id: 'text', label: 'Text' },
+  { id: 'choice', label: 'Choices' },
 ];
+let nextDraftKey = 0;
 
-const emptyForm = {
+type PracticeFormState = {
+  name: string;
+  description: string;
+  domainId: string;
+  routineId: string;
+  reviewSectionId: string;
+  primaryMetricId: string | null;
+  metricKind: MetricKind;
+  metricName: string;
+  metricOptions: MetricOptionDraft[];
+  subPractices: PracticeMetricDraft[];
+  enabled: boolean;
+  allowNote: boolean;
+  markable: boolean;
+  weeklyGoalEnabled: boolean;
+  weeklyTarget: string;
+  blockersEnabled: boolean;
+  blockerIds: string[];
+};
+
+const emptyForm: PracticeFormState = {
   name: '',
   description: '',
   domainId: '',
   routineId: '',
   reviewSectionId: '',
+  primaryMetricId: null,
   metricKind: 'quality' as MetricKind,
+  metricName: 'Quality',
+  metricOptions: [],
+  subPractices: [],
   enabled: true,
   allowNote: true,
   markable: false,
@@ -152,7 +193,7 @@ export default function PracticesScreen() {
       })
       .filter((task) => {
         if (!normalizedQuery) return true;
-        return `${task.name} ${task.domainName} ${task.routineName} ${task.reviewSectionName} ${task.metricName ?? ''}`.toLowerCase().includes(normalizedQuery);
+        return `${task.name} ${task.domainName} ${task.routineName} ${task.reviewSectionName} ${task.metrics.map((metric) => metric.name).join(' ')}`.toLowerCase().includes(normalizedQuery);
       });
   }, [query, reorderMode, selectedReorderRoutineId, statusFilter, tasks]);
   const sortedPractices = useMemo(() => {
@@ -213,6 +254,7 @@ export default function PracticesScreen() {
   }
 
   function startEdit(task: TaskRow) {
+    const [primaryMetric, ...subPractices] = task.metrics;
     setEditing(task);
     setForm({
       name: task.name,
@@ -220,7 +262,11 @@ export default function PracticesScreen() {
       domainId: task.domainId,
       routineId: task.routineId,
       reviewSectionId: task.reviewSectionId,
-      metricKind: metricTypeToKind(task.metricType),
+      primaryMetricId: primaryMetric?.id ?? null,
+      metricKind: metricTypeToKind(primaryMetric?.metricType ?? null),
+      metricName: primaryMetric?.name ?? 'Quality',
+      metricOptions: toMetricOptionDrafts(primaryMetric?.options ?? []),
+      subPractices: subPractices.map(toPracticeMetricDraft),
       enabled: task.enabled === 1,
       allowNote: task.allowNote === 1,
       markable: task.markable === 1,
@@ -238,6 +284,16 @@ export default function PracticesScreen() {
       setMessage('Name, routine, and part of day are required.');
       return;
     }
+    if (!form.metricName.trim() || form.subPractices.some((subPractice) => !subPractice.name.trim())) {
+      setMessage('The primary metric and every sub-practice need a name.');
+      return;
+    }
+    const choiceWithoutOptions = [formMetricFromPrimary(form), ...form.subPractices]
+      .some((metric) => metric.metricKind === 'choice' && metric.options.filter((option) => option.label.trim()).length < 2);
+    if (choiceWithoutOptions) {
+      setMessage('Choice metrics need at least two options.');
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -245,13 +301,13 @@ export default function PracticesScreen() {
         await updateTask({
           routinePracticeId: editing.routinePracticeId,
           practiceId: editing.practiceId,
-          metricId: editing.metricId,
           ...form,
+          metrics: metricsFromForm(form),
           weeklyTarget: weeklyTargetFromForm(form),
         });
         setMessage(await syncedMessage('Practice updated.'));
       } else {
-        await createTask({ ...form, weeklyTarget: weeklyTargetFromForm(form) });
+        await createTask({ ...form, metrics: metricsFromForm(form), weeklyTarget: weeklyTargetFromForm(form) });
         setMessage(await syncedMessage('Practice added.'));
       }
       router.replace('/practices');
@@ -421,7 +477,9 @@ export default function PracticesScreen() {
                       {task.routineName} | {task.reviewSectionName} | {task.domainName}
                     </Text>
                     <Text style={styles.taskMeta}>
-                      {task.metricName ?? 'No metric'} {task.metricType ? `(${task.metricType})` : ''} | {task.enabled ? 'active' : 'hidden'}
+                      {task.metrics[0]?.name ?? 'No metric'} {task.metrics[0]?.metricType ? `(${task.metrics[0].metricType})` : ''}
+                      {task.metrics.length > 1 ? ` + ${task.metrics.length - 1} sub-practice${task.metrics.length === 2 ? '' : 's'}` : ''}
+                      {' | '}{task.enabled ? 'active' : 'hidden'}
                       {task.weeklyTarget ? ` | weekly goal ${task.weeklyTarget}x` : ''}
                     </Text>
                   </View>
@@ -501,7 +559,7 @@ function TaskForm({
   form: typeof emptyForm;
   options: Options;
   reminderPreferences: ReminderPreferences;
-  setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
+  setForm: React.Dispatch<React.SetStateAction<PracticeFormState>>;
 }) {
   const domainChoices = useMemo(() => options.domains, [options.domains]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -526,7 +584,7 @@ function TaskForm({
           value={form.description}
         />
       </Field>
-      <Field label="Metric">
+      <Field label="Primary metric">
         <ChoiceGrid
           choices={metricOptions}
           selectedId={form.metricKind}
@@ -534,12 +592,36 @@ function TaskForm({
             setForm((current) => ({
               ...current,
               metricKind: metricKind as MetricKind,
+              metricName: shouldUseDefaultMetricName(current.metricName, current.metricKind)
+                ? defaultMetricName(metricKind as MetricKind)
+                : current.metricName,
+              metricOptions:
+                metricKind === 'choice' && current.metricOptions.length < 2
+                  ? defaultChoiceOptions()
+                  : current.metricOptions,
               weeklyGoalEnabled: metricKind === 'completed' ? current.weeklyGoalEnabled : false,
               weeklyTarget: metricKind === 'completed' ? current.weeklyTarget : '',
             }))
           }
         />
+        <TextInput
+          onChangeText={(metricName) => setForm((current) => ({ ...current, metricName }))}
+          placeholder="Metric label"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+          value={form.metricName}
+        />
+        {form.metricKind === 'choice' ? (
+          <ChoiceOptionsEditor
+            options={form.metricOptions}
+            onChange={(metricOptions) => setForm((current) => ({ ...current, metricOptions }))}
+          />
+        ) : null}
       </Field>
+      <SubPracticeEditor
+        subPractices={form.subPractices}
+        onChange={(subPractices) => setForm((current) => ({ ...current, subPractices }))}
+      />
       <Field label="Routine">
         <ChoiceGrid choices={options.routines} selectedId={form.routineId} onSelect={(routineId) => setForm((current) => ({ ...current, routineId }))} />
       </Field>
@@ -643,6 +725,149 @@ function TaskForm({
   );
 }
 
+function SubPracticeEditor({
+  subPractices,
+  onChange,
+}: {
+  subPractices: PracticeMetricDraft[];
+  onChange: (subPractices: PracticeMetricDraft[]) => void;
+}) {
+  function update(index: number, changes: Partial<PracticeMetricDraft>) {
+    onChange(subPractices.map((item, itemIndex) => (itemIndex === index ? { ...item, ...changes } : item)));
+  }
+
+  function updateKind(index: number, metricKind: MetricKind) {
+    const current = subPractices[index];
+    update(index, {
+      metricKind,
+      name: shouldUseDefaultMetricName(current.name, current.metricKind) ? defaultMetricName(metricKind) : current.name,
+      options: metricKind === 'choice' && current.options.length < 2 ? defaultChoiceOptions() : current.options,
+    });
+  }
+
+  function move(index: number, direction: -1 | 1) {
+    const destination = index + direction;
+    if (destination < 0 || destination >= subPractices.length) return;
+    const next = [...subPractices];
+    [next[index], next[destination]] = [next[destination], next[index]];
+    onChange(next);
+  }
+
+  return (
+    <View style={styles.subPracticeSection}>
+      <View style={styles.subPracticeHeader}>
+        <View style={styles.subPracticeHeaderText}>
+          <Text style={styles.label}>Sub-practices</Text>
+          <Text style={styles.subPracticeHelp}>Optional details tracked underneath this practice, each with its own answer and trends.</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => onChange([...subPractices, newPracticeMetricDraft()])}
+          style={styles.addSubPracticeButton}
+        >
+          <CirclePlus color={colors.blue} size={17} />
+          <Text style={styles.addSubPracticeText}>Add</Text>
+        </Pressable>
+      </View>
+
+      {subPractices.map((subPractice, index) => (
+        <View key={subPractice.key} style={styles.subPracticeRow}>
+          <View style={styles.subPracticeTopRow}>
+            <Text style={styles.subPracticeNumber}>Sub-practice {index + 1}</Text>
+            <View style={styles.subPracticeActions}>
+              <Pressable
+                accessibilityLabel={`Move ${subPractice.name || `sub-practice ${index + 1}`} up`}
+                accessibilityRole="button"
+                disabled={index === 0}
+                onPress={() => move(index, -1)}
+                style={[styles.smallIconButton, index === 0 && styles.disabled]}
+              >
+                <ArrowUp color={colors.ink} size={15} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel={`Move ${subPractice.name || `sub-practice ${index + 1}`} down`}
+                accessibilityRole="button"
+                disabled={index === subPractices.length - 1}
+                onPress={() => move(index, 1)}
+                style={[styles.smallIconButton, index === subPractices.length - 1 && styles.disabled]}
+              >
+                <ArrowDown color={colors.ink} size={15} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel={`Remove ${subPractice.name || `sub-practice ${index + 1}`}`}
+                accessibilityRole="button"
+                onPress={() => onChange(subPractices.filter((_, itemIndex) => itemIndex !== index))}
+                style={styles.smallIconButton}
+              >
+                <Trash2 color={colors.rose} size={15} />
+              </Pressable>
+            </View>
+          </View>
+          <TextInput
+            onChangeText={(name) => update(index, { name })}
+            placeholder="Example: On time"
+            placeholderTextColor={colors.muted}
+            style={styles.input}
+            value={subPractice.name}
+          />
+          <ChoiceGrid
+            choices={metricOptions}
+            selectedId={subPractice.metricKind}
+            onSelect={(metricKind) => updateKind(index, metricKind as MetricKind)}
+          />
+          {subPractice.metricKind === 'choice' ? (
+            <ChoiceOptionsEditor
+              options={subPractice.options}
+              onChange={(options) => update(index, { options })}
+            />
+          ) : null}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ChoiceOptionsEditor({
+  options,
+  onChange,
+}: {
+  options: MetricOptionDraft[];
+  onChange: (options: MetricOptionDraft[]) => void;
+}) {
+  return (
+    <View style={styles.choiceOptions}>
+      <Text style={styles.subPracticeHelp}>Choices shown during the review</Text>
+      {options.map((option, index) => (
+        <View key={option.key} style={styles.choiceOptionRow}>
+          <TextInput
+            onChangeText={(label) => onChange(options.map((item, itemIndex) => itemIndex === index ? { ...item, label } : item))}
+            placeholder={`Choice ${index + 1}`}
+            placeholderTextColor={colors.muted}
+            style={[styles.input, styles.choiceOptionInput]}
+            value={option.label}
+          />
+          <Pressable
+            accessibilityLabel={`Remove choice ${index + 1}`}
+            accessibilityRole="button"
+            onPress={() => onChange(options.filter((_, itemIndex) => itemIndex !== index))}
+            style={styles.smallIconButton}
+          >
+            <Trash2 color={colors.rose} size={15} />
+          </Pressable>
+        </View>
+      ))}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => onChange([...options, newMetricOptionDraft('')])}
+        style={styles.addChoiceButton}
+      >
+        <CirclePlus color={colors.blue} size={16} />
+        <Text style={styles.addSubPracticeText}>Add choice</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function MultiChoiceGrid({
   choices,
   selectedIds,
@@ -714,10 +939,88 @@ function metricTypeToKind(metricType: string | null): MetricKind {
   if (metricType === 'boolean') return 'completed';
   if (metricType === 'number') return 'number';
   if (metricType === 'text') return 'text';
+  if (metricType === 'enum') return 'choice';
   return 'quality';
 }
 
-function weeklyTargetFromForm(form: typeof emptyForm) {
+function metricKindToType(metricKind: MetricKind): EditablePracticeMetric['metricType'] {
+  if (metricKind === 'completed') return 'boolean';
+  if (metricKind === 'quality') return 'scale';
+  if (metricKind === 'choice') return 'enum';
+  return metricKind;
+}
+
+function defaultMetricName(metricKind: MetricKind) {
+  if (metricKind === 'completed') return 'Completed';
+  if (metricKind === 'quality') return 'Quality';
+  if (metricKind === 'number') return 'Number';
+  if (metricKind === 'text') return 'Text';
+  return 'Choice';
+}
+
+function shouldUseDefaultMetricName(name: string, metricKind: MetricKind) {
+  return !name.trim() || name.trim() === defaultMetricName(metricKind);
+}
+
+function draftKey(prefix: string) {
+  nextDraftKey += 1;
+  return `${prefix}_${nextDraftKey}`;
+}
+
+function newMetricOptionDraft(label: string, value: string | null = null, id: string | null = null): MetricOptionDraft {
+  return { key: id ?? draftKey('option'), id, label, value };
+}
+
+function defaultChoiceOptions() {
+  return [newMetricOptionDraft('Yes', 'yes'), newMetricOptionDraft('No', 'no')];
+}
+
+function newPracticeMetricDraft(): PracticeMetricDraft {
+  return {
+    key: draftKey('subpractice'),
+    id: null,
+    name: '',
+    metricKind: 'completed',
+    options: [],
+  };
+}
+
+function toMetricOptionDrafts(options: TaskRow['metrics'][number]['options']) {
+  return options.map((option) => newMetricOptionDraft(option.label, option.value, option.id));
+}
+
+function toPracticeMetricDraft(metric: TaskRow['metrics'][number]): PracticeMetricDraft {
+  return {
+    key: metric.id,
+    id: metric.id,
+    name: metric.name,
+    metricKind: metricTypeToKind(metric.metricType),
+    options: toMetricOptionDrafts(metric.options),
+  };
+}
+
+function formMetricFromPrimary(form: PracticeFormState): PracticeMetricDraft {
+  return {
+    key: form.primaryMetricId ?? 'primary',
+    id: form.primaryMetricId,
+    name: form.metricName,
+    metricKind: form.metricKind,
+    options: form.metricOptions,
+  };
+}
+
+function metricsFromForm(form: PracticeFormState): EditablePracticeMetric[] {
+  return [formMetricFromPrimary(form), ...form.subPractices].map((metric) => ({
+    id: metric.id,
+    name: metric.name.trim(),
+    metricType: metricKindToType(metric.metricKind),
+    options: metric.options
+      .filter((option) => option.label.trim())
+      .map((option) => ({ id: option.id, label: option.label.trim(), value: option.value })),
+  }));
+}
+
+function weeklyTargetFromForm(form: PracticeFormState) {
   if (form.metricKind !== 'completed' || !form.weeklyGoalEnabled) return null;
   const target = Number(form.weeklyTarget);
   if (!Number.isFinite(target) || target < 1) return null;
@@ -880,6 +1183,65 @@ const styles = StyleSheet.create({
   choiceSelected: { backgroundColor: colors.blueSoft, borderColor: colors.blue },
   choiceText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
   choiceTextSelected: { color: colors.blue },
+  choiceOptions: { gap: spacing.sm },
+  choiceOptionRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  choiceOptionInput: { flex: 1 },
+  addChoiceButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+  },
+  subPracticeSection: { gap: spacing.sm },
+  subPracticeHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+  },
+  subPracticeHeaderText: { flex: 1, gap: spacing.xs, minWidth: 210 },
+  subPracticeHelp: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  addSubPracticeButton: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  addSubPracticeText: { color: colors.blue, fontSize: 14, fontWeight: '800' },
+  subPracticeRow: {
+    borderLeftColor: colors.blue,
+    borderLeftWidth: 3,
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    gap: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingTop: spacing.md,
+  },
+  subPracticeTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  subPracticeNumber: { color: colors.muted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  subPracticeActions: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
+  smallIconButton: {
+    alignItems: 'center',
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  disabled: { opacity: 0.35 },
   optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   protectedText: { color: colors.muted, flexBasis: '100%', fontSize: 13, fontWeight: '800', lineHeight: 18 },
   orderButton: {

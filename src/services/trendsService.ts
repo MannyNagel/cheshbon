@@ -109,8 +109,11 @@ export async function getTrendSummary(): Promise<TrendSummary> {
   const domainInsights = buildDomainInsights(scores7, scores30);
   const practiceTrends = [];
   for (const practice of practices) {
-    const trend = await buildPracticeTrend(practice, weekWindow);
-    if (trend) practiceTrends.push(trend);
+    const sortedMetrics = [...practice.metrics].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const [metricIndex, metric] of sortedMetrics.entries()) {
+      const trend = await buildMetricTrend(practice, metric, metricIndex > 0, weekWindow);
+      if (trend) practiceTrends.push(trend);
+    }
   }
 
   return {
@@ -400,24 +403,44 @@ function buildDomainInsights(scores7: ScoreValue[], scores30: ScoreValue[]): Tre
   });
 }
 
-async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[number], weekWindow: WeekWindow): Promise<TrendSummary['practiceTrends'][number] | null> {
-  const textMetric = practice.metrics.find((metric) => metric.type === 'text');
-  const numberMetric = practice.metrics.find((metric) => metric.type === 'number');
-  const scaleMetric = practice.metrics.find((metric) => metric.type === 'scale');
-  const booleanMetric = practice.metrics.find((metric) => metric.type === 'boolean');
-  const metric = textMetric ?? numberMetric ?? scaleMetric ?? booleanMetric;
-  if (!metric) return null;
-
-  if (metric.type === 'text') {
-    const recentEntries = await getTextValues(practice.practiceId, metric.id);
+async function buildMetricTrend(
+  practice: ReturnType<typeof groupPractices>[number],
+  metric: ReturnType<typeof groupPractices>[number]['metrics'][number],
+  isSubPractice: boolean,
+  weekWindow: WeekWindow,
+): Promise<TrendSummary['practiceTrends'][number] | null> {
+  if (metric.type === 'enum') {
+    const recentEntries = await getChoiceValues(practice.practiceId, metric.id);
     if (!recentEntries.length) return null;
     const emptyWindow = emptyTrendWindow();
     return {
       practiceId: practice.practiceId,
+      metricId: metric.id,
       practiceName: practice.practiceName,
       domainId: practice.domainId,
       domainName: practice.domainName,
       metricName: metric.name,
+      isSubPractice,
+      metricKind: 'choice',
+      unitLabel: 'recent selections',
+      week: emptyWindow,
+      month: emptyWindow,
+      allTime: emptyWindow,
+      recentEntries,
+    };
+  }
+  if (metric.type === 'text') {
+    const recentEntries = await getTextValues(practice.practiceId, metric.id, !isSubPractice);
+    if (!recentEntries.length) return null;
+    const emptyWindow = emptyTrendWindow();
+    return {
+      practiceId: practice.practiceId,
+      metricId: metric.id,
+      practiceName: practice.practiceName,
+      domainId: practice.domainId,
+      domainName: practice.domainName,
+      metricName: metric.name,
+      isSubPractice,
       metricKind: 'text',
       unitLabel: 'recent entries',
       week: emptyWindow,
@@ -428,14 +451,16 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
   }
 
   if (metric.type === 'boolean') {
-    const values = await getBooleanValues(practice.practiceId, metric.id);
+    const values = await getBooleanValues(practice.practiceId, metric.id, !isSubPractice);
     if (!values.length) return null;
     return {
       practiceId: practice.practiceId,
+      metricId: metric.id,
       practiceName: practice.practiceName,
       domainId: practice.domainId,
       domainName: practice.domainName,
       metricName: metric.name,
+      isSubPractice,
       metricKind: 'complete',
       unitLabel: '%',
       week: buildWindow(values, 'week', true, weekWindow),
@@ -449,10 +474,12 @@ async function buildPracticeTrend(practice: ReturnType<typeof groupPractices>[nu
   if (!values.length) return null;
   return {
     practiceId: practice.practiceId,
+    metricId: metric.id,
     practiceName: practice.practiceName,
     domainId: practice.domainId,
     domainName: practice.domainName,
     metricName: metric.name,
+    isSubPractice,
     metricKind: metric.type === 'number' ? 'number' : 'quality',
     unitLabel: metric.type === 'number' ? 'avg' : '1-5',
     week: buildWindow(values, 'week', false, weekWindow),
@@ -482,7 +509,7 @@ async function getNumericValues(metricId: string): Promise<NumericValue[]> {
   );
 }
 
-async function getBooleanValues(practiceId: string, metricId: string): Promise<NumericValue[]> {
+async function getBooleanValues(practiceId: string, metricId: string, allowStatusFallback: boolean): Promise<NumericValue[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ date: string; value_boolean: number | null; status: string | null }>(
     `SELECT de.entry_date as date, emv.value_boolean, de.status
@@ -503,24 +530,30 @@ async function getBooleanValues(practiceId: string, metricId: string): Promise<N
   return rows
     .map((row) => {
       if (row.value_boolean != null) return { date: row.date, value: row.value_boolean ? 1 : 0 };
-      if (row.status === 'done') return { date: row.date, value: 1 };
-      if (row.status === 'partial') return { date: row.date, value: 0.5 };
-      if (row.status === 'missed') return { date: row.date, value: 0 };
+      if (allowStatusFallback && row.status === 'done') return { date: row.date, value: 1 };
+      if (allowStatusFallback && row.status === 'partial') return { date: row.date, value: 0.5 };
+      if (allowStatusFallback && row.status === 'missed') return { date: row.date, value: 0 };
       return null;
     })
     .filter((row): row is NumericValue => row != null);
 }
 
-async function getTextValues(practiceId: string, metricId: string): Promise<TextValue[]> {
+async function getTextValues(practiceId: string, metricId: string, allowNoteFallback: boolean): Promise<TextValue[]> {
   const db = await getDb();
   return db.getAllAsync<TextValue>(
     `SELECT de.entry_date as date,
-      COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) as text
+      COALESCE(
+        NULLIF(TRIM(emv.value_text), ''),
+        CASE WHEN ? = 1 THEN NULLIF(TRIM(de.note), '') ELSE NULL END
+      ) as text
      FROM daily_entries de
      JOIN practices p ON p.id = de.practice_id
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = ?
      WHERE de.practice_id = ?
-      AND COALESCE(NULLIF(TRIM(emv.value_text), ''), NULLIF(TRIM(de.note), '')) IS NOT NULL
+      AND COALESCE(
+        NULLIF(TRIM(emv.value_text), ''),
+        CASE WHEN ? = 1 THEN NULLIF(TRIM(de.note), '') ELSE NULL END
+      ) IS NOT NULL
       AND EXISTS (
         SELECT 1
         FROM routine_practices rp
@@ -529,8 +562,44 @@ async function getTextValues(practiceId: string, metricId: string): Promise<Text
       )
      ORDER BY de.entry_date DESC
      LIMIT 8`,
+    allowNoteFallback ? 1 : 0,
     metricId,
     practiceId,
+    allowNoteFallback ? 1 : 0,
+  );
+}
+
+async function getChoiceValues(practiceId: string, metricId: string): Promise<TextValue[]> {
+  const db = await getDb();
+  return db.getAllAsync<TextValue>(
+    `SELECT de.entry_date as date,
+      COALESCE(
+        (
+          SELECT mo.label
+          FROM metric_options mo
+          WHERE mo.metric_id = emv.metric_id
+           AND mo.value = emv.value_text
+          ORDER BY mo.active DESC, mo.updated_at DESC, mo.sort_order
+          LIMIT 1
+        ),
+        emv.value_text
+      ) as text
+     FROM entry_metric_values emv
+     JOIN daily_entries de ON de.id = emv.entry_id
+     JOIN practices p ON p.id = de.practice_id
+     WHERE de.practice_id = ?
+      AND emv.metric_id = ?
+      AND NULLIF(TRIM(emv.value_text), '') IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM routine_practices rp
+        WHERE rp.practice_id = p.id
+         AND rp.archived_from IS NULL
+      )
+     ORDER BY de.entry_date DESC
+     LIMIT 8`,
+    practiceId,
+    metricId,
   );
 }
 
