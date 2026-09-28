@@ -1,6 +1,7 @@
 import { resetDatabaseToSeedDefaults } from '@/src/db/client';
 import { exportAllData, importAllData } from '@/src/repositories/cheshbonRepo';
 import { mergeCloudSnapshots, type SnapshotPayload } from '@/src/services/cloudSnapshotMerge';
+import { syncGoogleDriveMirrorIfConnected } from '@/src/services/googleDriveService';
 import { isSupabaseConfigured, supabase } from '@/src/services/supabaseClient';
 import { createSerializedRetryQueue } from '@/src/services/syncQueue';
 
@@ -196,6 +197,7 @@ async function pushLocalDataForUser(client: NonNullable<typeof supabase>, userId
     { onConflict: 'user_id' },
   );
   if (error) throw error;
+  await syncGoogleDriveMirrorIfConnected();
   return now;
 }
 

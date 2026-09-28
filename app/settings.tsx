@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, LogIn, LogOut, Mail, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
+import { Bell, BookOpen, ChevronDown, ChevronUp, CloudDownload, CloudUpload, ExternalLink, HardDrive, Link2Off, LogIn, LogOut, Mail, Plus, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -31,6 +31,13 @@ import {
   type CloudStatus,
 } from '@/src/services/cloudSyncService';
 import { emailRawDataToSelf } from '@/src/services/emailService';
+import {
+  connectGoogleDrive,
+  disconnectGoogleDrive,
+  getGoogleDriveStatus,
+  syncGoogleDriveMirror,
+  type GoogleDriveStatus,
+} from '@/src/services/googleDriveService';
 import { clearAccessHandleBusyRecovery, scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 type DomainRow = { id: string; name: string; description: string | null; active: number; inUse: number };
@@ -38,6 +45,7 @@ type BlockerRow = { id: string; name: string; description: string | null; active
 
 export default function SettingsScreen() {
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
   const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
@@ -73,11 +81,12 @@ export default function SettingsScreen() {
       }
     }
     let nextCloudStatus: CloudStatus;
+    let nextGoogleDriveStatus: GoogleDriveStatus | null;
     let nextReminderPreferences: ReminderPreferences;
     let nextDomainRows: DomainRow[];
     let nextBlockerRows: BlockerRow[];
     try {
-      [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows] = await Promise.all([
+      [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows, nextGoogleDriveStatus] = await Promise.all([
         getCloudStatus().catch((error) => {
           cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
           return { configured: true, signedIn: oauthCompleted, email: null, name: null, lastSyncedAt: null };
@@ -85,12 +94,14 @@ export default function SettingsScreen() {
         getReminderPreferences(),
         getDomainEditorRows(),
         getBlockerEditorRows(),
+        getGoogleDriveStatus().catch(() => null),
       ]);
     } catch (error) {
       if (recoverFromAccessHandleError(error)) return;
       throw error;
     }
     setCloudStatus(nextCloudStatus);
+    setGoogleDriveStatus(nextGoogleDriveStatus);
     setReminderPreferences(nextReminderPreferences);
     setDomainRows(nextDomainRows);
     setBlockerRows(nextBlockerRows);
@@ -106,8 +117,23 @@ export default function SettingsScreen() {
       setReminderPreferences({ taskRemindersEnabled: false, morningReminderEnabled: true, morningReminderTime: '05:30' });
       setDomainRows([]);
       setBlockerRows([]);
+      setGoogleDriveStatus(null);
     });
   }, [load, recoverFromAccessHandleError]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const driveResult = url.searchParams.get('drive');
+    if (!driveResult) return;
+    setMessage(
+      driveResult === 'connected'
+        ? 'Google Drive connected. Your data mirror will update with the next cloud backup.'
+        : 'Google Drive could not be connected. Please try again.',
+    );
+    url.searchParams.delete('drive');
+    window.history.replaceState(null, document.title, `${url.pathname}${url.search}`);
+  }, []);
 
   useEffect(() => {
     if (!cloudStatus?.signedIn) {
@@ -270,6 +296,16 @@ export default function SettingsScreen() {
         )}
       </View>
 
+      {cloudStatus.signedIn && googleDriveStatus ? (
+        <GoogleDriveMirrorSection
+          busy={busy}
+          status={googleDriveStatus}
+          onStatusChange={setGoogleDriveStatus}
+          setBusy={setBusy}
+          setMessage={setMessage}
+        />
+      ) : null}
+
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
       <TutorialSection />
@@ -288,6 +324,116 @@ export default function SettingsScreen() {
         setMessage={setMessage}
       />
     </ScrollView>
+  );
+}
+
+function GoogleDriveMirrorSection({
+  busy,
+  status,
+  onStatusChange,
+  setBusy,
+  setMessage,
+}: {
+  busy: boolean;
+  status: GoogleDriveStatus;
+  onStatusChange: (status: GoogleDriveStatus) => void;
+  setBusy: (busy: boolean) => void;
+  setMessage: (message: string | null) => void;
+}) {
+  async function connect() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await connectGoogleDrive();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not connect Google Drive.');
+      setBusy(false);
+    }
+  }
+
+  async function updateMirror() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const nextStatus = await syncGoogleDriveMirror();
+      onStatusChange(nextStatus);
+      setMessage(`Google Doc updated: ${formatDateTime(nextStatus.lastSyncedAt ?? new Date().toISOString())}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not update the Google Doc mirror.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await disconnectGoogleDrive();
+      onStatusChange({ configured: status.configured, connected: false, documentUrl: null, lastSyncedAt: null });
+      setMessage('Google Drive disconnected. The existing document was left in your Drive.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not disconnect Google Drive.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.cloudBox}>
+      <View style={styles.cloudHeader}>
+        <View style={styles.reminderTitleRow}>
+          <HardDrive color={colors.blue} size={18} />
+          <Text style={styles.sectionTitle}>Google Drive mirror</Text>
+        </View>
+        <Text style={styles.cloudMeta}>
+          Keep a private, readable copy of your Daily Cheshbon data in Google Docs for personal access and analysis.
+        </Text>
+        {status.connected ? (
+          <Text style={styles.cloudStatus}>
+            Connected{status.lastSyncedAt ? ` · Updated ${formatDateTime(status.lastSyncedAt)}` : ''}
+          </Text>
+        ) : (
+          <Text style={styles.cloudStatus}>{status.configured ? 'Not connected' : 'Server setup required'}</Text>
+        )}
+      </View>
+      <View style={styles.actions}>
+        {status.connected ? (
+          <>
+            <ActionButton
+              disabled={busy}
+              icon={<RefreshCw color={colors.ink} size={17} />}
+              label="Update now"
+              onPress={updateMirror}
+            />
+            {status.documentUrl ? (
+              <ActionButton
+                disabled={busy}
+                icon={<ExternalLink color={colors.ink} size={17} />}
+                label="Open document"
+                onPress={() => Linking.openURL(status.documentUrl as string)}
+              />
+            ) : null}
+            <ActionButton
+              disabled={busy}
+              icon={<Link2Off color={colors.ink} size={17} />}
+              label="Disconnect"
+              onPress={disconnect}
+            />
+          </>
+        ) : (
+          <ActionButton
+            disabled={busy || !status.configured}
+            icon={<HardDrive color={colors.ink} size={17} />}
+            label="Connect Google Drive"
+            onPress={connect}
+          />
+        )}
+      </View>
+      {status.connected ? (
+        <Text style={styles.cloudMeta}>The document is generated from the app. Changes made directly in Google Docs will be replaced on the next update.</Text>
+      ) : null}
+    </View>
   );
 }
 
