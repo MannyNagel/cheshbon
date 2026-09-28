@@ -22,10 +22,13 @@ CREATE TABLE IF NOT EXISTS practices (
   allow_note INTEGER NOT NULL DEFAULT 1,
   markable INTEGER NOT NULL DEFAULT 0,
   weekly_target INTEGER,
+  parent_practice_id TEXT,
+  parent_sort_order INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (domain_id) REFERENCES domains(id)
+  FOREIGN KEY (domain_id) REFERENCES domains(id),
+  FOREIGN KEY (parent_practice_id) REFERENCES practices(id)
 );
 
 CREATE TABLE IF NOT EXISTS metrics (
@@ -38,10 +41,13 @@ CREATE TABLE IF NOT EXISTS metrics (
   required INTEGER NOT NULL DEFAULT 0,
   help_text TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  domain_id TEXT,
+  is_primary INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (practice_id) REFERENCES practices(id)
+  FOREIGN KEY (practice_id) REFERENCES practices(id),
+  FOREIGN KEY (domain_id) REFERENCES domains(id)
 );
 
 CREATE TABLE IF NOT EXISTS metric_options (
@@ -233,6 +239,7 @@ CREATE TABLE IF NOT EXISTS app_preferences (
 
 CREATE INDEX IF NOT EXISTS idx_practices_user_id ON practices(user_id);
 CREATE INDEX IF NOT EXISTS idx_practices_domain_id ON practices(domain_id);
+CREATE INDEX IF NOT EXISTS idx_practices_parent_id ON practices(parent_practice_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_practice_id ON metrics(practice_id);
 CREATE INDEX IF NOT EXISTS idx_metric_options_metric_id ON metric_options(metric_id);
 CREATE INDEX IF NOT EXISTS idx_routine_schedules_routine_id ON routine_schedules(routine_template_id);

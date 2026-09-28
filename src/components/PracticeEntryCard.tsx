@@ -2,19 +2,44 @@ import { Bell, StickyNote } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { BlockerSelector } from '@/src/components/BlockerSelector';
 import { MetricInput } from '@/src/components/MetricInput';
 import { colors, spacing } from '@/src/components/ui';
-import type { Blocker, EntryDraft, EntryStatus, MetricValueDraft, NightlyReviewItem } from '@/src/models/types';
+import type { EntryDraft, EntryStatus, MetricValueDraft, NightlyReviewItem } from '@/src/models/types';
 
 type Props = {
   item: NightlyReviewItem;
-  blockers: Blocker[];
-  draft?: EntryDraft;
+  entries: Record<string, EntryDraft>;
   onChange: (entry: EntryDraft) => void;
 };
 
-export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
+export function PracticeEntryCard({ item, entries, onChange }: Props) {
+  return (
+    <View style={styles.card}>
+      <PracticeFields draft={entries[item.practiceId]} item={item} onChange={onChange} />
+      {item.subPractices.length ? (
+        <View style={styles.childList}>
+          {item.subPractices.map((child) => (
+            <View key={child.practiceId} style={styles.childPractice}>
+              <PracticeFields draft={entries[child.practiceId]} item={child} nested onChange={onChange} />
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function PracticeFields({
+  item,
+  draft,
+  nested = false,
+  onChange,
+}: {
+  item: NightlyReviewItem;
+  draft?: EntryDraft;
+  nested?: boolean;
+  onChange: (entry: EntryDraft) => void;
+}) {
   const entry: EntryDraft =
     draft ?? {
       practiceId: item.practiceId,
@@ -63,10 +88,6 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
   const visibleMetrics = collapseAfterNotApplicable
     ? item.metrics.filter((metric) => entry.metricValues[metric.id]?.valueText === 'not_applicable')
     : item.metrics;
-  const visibleBlockers = Array.isArray(item.allowedBlockerIds)
-    ? blockers.filter((blocker) => item.allowedBlockerIds?.includes(blocker.id))
-    : blockers;
-  const showBlockers = visibleBlockers.length > 0;
   const showNote = item.allowNote;
   const weeklyGoalMetric = item.weeklyGoal ? item.metrics.find((metric) => metric.metricType === 'boolean') : null;
   const completedThisReview = weeklyGoalMetric ? entry.metricValues[weeklyGoalMetric.id]?.valueBoolean === true : false;
@@ -74,10 +95,10 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
   const weeklyGoalRatio = item.weeklyGoal ? Math.min(1, weeklyGoalCompleted / item.weeklyGoal.target) : 0;
 
   return (
-    <View style={styles.card}>
+    <>
       <View style={styles.header}>
         <View style={styles.titleBlock}>
-          <Text style={styles.title}>{item.displayName}</Text>
+          <Text style={nested ? styles.childTitle : styles.title}>{item.displayName}</Text>
           <Text style={styles.meta}>{item.domainName}</Text>
         </View>
         {item.markable ? (
@@ -111,7 +132,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
             key={metric.id}
             metric={metric}
             onChange={updateMetric}
-            subPractice={item.metrics.findIndex((candidate) => candidate.id === metric.id) > 0}
+            subPractice={nested || !metric.isPrimary}
             value={entry.metricValues[metric.id]}
           />
         ))}
@@ -119,13 +140,6 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
       {collapseAfterNotApplicable ? null : (
         <>
       <View style={styles.quickActions}>
-        {showBlockers ? (
-          <BlockerSelector
-            blockers={visibleBlockers}
-            onChange={(blockerIds) => onChange({ ...entry, blockerIds })}
-            selectedIds={entry.blockerIds.filter((blockerId) => visibleBlockers.some((blocker) => blocker.id === blockerId))}
-          />
-        ) : null}
         {showNote ? (
           <Pressable accessibilityRole="button" onPress={() => setNoteOpen((value) => !value)} style={styles.noteButton}>
             <StickyNote color={colors.ink} size={17} />
@@ -144,7 +158,7 @@ export function PracticeEntryCard({ item, blockers, draft, onChange }: Props) {
       ) : null}
         </>
       )}
-    </View>
+    </>
   );
 }
 
@@ -170,6 +184,23 @@ const styles = StyleSheet.create({
   title: {
     color: colors.ink,
     fontSize: 18,
+    fontWeight: '800',
+  },
+  childList: {
+    borderTopColor: colors.softLine,
+    borderTopWidth: 1,
+    gap: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  childPractice: {
+    borderLeftColor: colors.green,
+    borderLeftWidth: 3,
+    gap: spacing.md,
+    paddingLeft: spacing.md,
+  },
+  childTitle: {
+    color: colors.ink,
+    fontSize: 16,
     fontWeight: '800',
   },
   meta: {

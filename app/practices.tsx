@@ -25,12 +25,13 @@ type PracticeMetricDraft = {
   name: string;
   metricKind: MetricKind;
   options: MetricOptionDraft[];
+  domainId: string;
 };
 type Options = {
   domains: Array<{ id: string; name: string }>;
   routines: Array<{ id: string; name: string }>;
   reviewSections: Array<{ id: string; name: string }>;
-  blockers: Array<{ id: string; name: string }>;
+  parentPractices: Array<{ id: string; name: string }>;
 };
 type TaskRow = {
   routinePracticeId: string;
@@ -53,14 +54,17 @@ type TaskRow = {
     scaleMin: number | null;
     scaleMax: number | null;
     sortOrder: number;
+    domainId: string | null;
+    domainName: string | null;
+    isPrimary: number;
     options: Array<{ id: string; label: string; value: string }>;
   }>;
   enabled: number;
   sortOrder: number;
   archivedFrom: string | null;
-  blockerIds: string[];
-  blockersConfigured: number;
   protectedFromRemoval: number;
+  parentPracticeId: string | null;
+  parentPracticeName: string | null;
 };
 
 const metricOptions: Array<{ id: MetricKind; label: string }> = [
@@ -79,17 +83,17 @@ type PracticeFormState = {
   routineId: string;
   reviewSectionId: string;
   primaryMetricId: string | null;
+  primaryMetricEnabled: boolean;
   metricKind: MetricKind;
   metricName: string;
   metricOptions: MetricOptionDraft[];
   subPractices: PracticeMetricDraft[];
+  parentPracticeId: string;
   enabled: boolean;
   allowNote: boolean;
   markable: boolean;
   weeklyGoalEnabled: boolean;
   weeklyTarget: string;
-  blockersEnabled: boolean;
-  blockerIds: string[];
 };
 
 const emptyForm: PracticeFormState = {
@@ -99,17 +103,17 @@ const emptyForm: PracticeFormState = {
   routineId: '',
   reviewSectionId: '',
   primaryMetricId: null,
+  primaryMetricEnabled: true,
   metricKind: 'quality' as MetricKind,
   metricName: 'Quality',
   metricOptions: [],
   subPractices: [],
+  parentPracticeId: '',
   enabled: true,
   allowNote: true,
   markable: false,
   weeklyGoalEnabled: false,
   weeklyTarget: '',
-  blockersEnabled: true,
-  blockerIds: [] as string[],
 };
 
 export default function PracticesScreen() {
@@ -147,7 +151,7 @@ export default function PracticesScreen() {
       }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `Could not load practices: ${JSON.stringify(error)}`);
-      setOptions({ domains: [], routines: [], reviewSections: [], blockers: [] });
+      setOptions({ domains: [], routines: [], reviewSections: [], parentPractices: [] });
     }
   }, []);
 
@@ -170,8 +174,6 @@ export default function PracticesScreen() {
         domainId: options.domains[0]?.id ?? '',
         routineId: params.routineId ?? options.routines[0]?.id ?? '',
         reviewSectionId: options.reviewSections[0]?.id ?? '',
-        blockersEnabled: true,
-        blockerIds: options.blockers.map((blocker) => blocker.id),
         weeklyGoalEnabled: false,
         weeklyTarget: '',
       });
@@ -244,8 +246,6 @@ export default function PracticesScreen() {
       domainId: options?.domains[0]?.id ?? '',
       routineId: options?.routines[0]?.id ?? '',
       reviewSectionId: options?.reviewSections[0]?.id ?? '',
-      blockersEnabled: true,
-      blockerIds: options?.blockers.map((blocker) => blocker.id) ?? [],
       weeklyGoalEnabled: false,
       weeklyTarget: '',
     });
@@ -254,7 +254,8 @@ export default function PracticesScreen() {
   }
 
   function startEdit(task: TaskRow) {
-    const [primaryMetric, ...subPractices] = task.metrics;
+    const primaryMetric = task.metrics.find((metric) => metric.isPrimary === 1) ?? null;
+    const subPractices = task.metrics.filter((metric) => metric.isPrimary !== 1);
     setEditing(task);
     setForm({
       name: task.name,
@@ -263,17 +264,17 @@ export default function PracticesScreen() {
       routineId: task.routineId,
       reviewSectionId: task.reviewSectionId,
       primaryMetricId: primaryMetric?.id ?? null,
+      primaryMetricEnabled: Boolean(primaryMetric),
       metricKind: metricTypeToKind(primaryMetric?.metricType ?? null),
       metricName: primaryMetric?.name ?? 'Quality',
       metricOptions: toMetricOptionDrafts(primaryMetric?.options ?? []),
       subPractices: subPractices.map(toPracticeMetricDraft),
+      parentPracticeId: task.parentPracticeId ?? '',
       enabled: task.enabled === 1,
       allowNote: task.allowNote === 1,
       markable: task.markable === 1,
       weeklyGoalEnabled: task.weeklyTarget != null && task.weeklyTarget > 0,
       weeklyTarget: task.weeklyTarget == null ? '' : String(task.weeklyTarget),
-      blockersEnabled: task.blockersConfigured === 0 || task.blockerIds.length > 0,
-      blockerIds: task.blockersConfigured === 0 ? options?.blockers.map((blocker) => blocker.id) ?? [] : task.blockerIds,
     });
     setMode('edit');
     setMessage(null);
@@ -284,11 +285,12 @@ export default function PracticesScreen() {
       setMessage('Name, routine, and part of day are required.');
       return;
     }
-    if (!form.metricName.trim() || form.subPractices.some((subPractice) => !subPractice.name.trim())) {
-      setMessage('The primary metric and every sub-practice need a name.');
+    if ((form.primaryMetricEnabled && !form.metricName.trim()) || form.subPractices.some((subPractice) => !subPractice.name.trim())) {
+      setMessage('Every enabled metric and sub-practice needs a name.');
       return;
     }
-    const choiceWithoutOptions = [formMetricFromPrimary(form), ...form.subPractices]
+    const choiceWithoutOptions = [form.primaryMetricEnabled ? formMetricFromPrimary(form) : null, ...form.subPractices]
+      .filter((metric): metric is PracticeMetricDraft => metric != null)
       .some((metric) => metric.metricKind === 'choice' && metric.options.filter((option) => option.label.trim()).length < 2);
     if (choiceWithoutOptions) {
       setMessage('Choice metrics need at least two options.');
@@ -475,10 +477,13 @@ export default function PracticesScreen() {
                     <Text style={styles.taskTitle}>{task.name}</Text>
                     <Text style={styles.taskMeta}>
                       {task.routineName} | {task.reviewSectionName} | {task.domainName}
+                      {task.parentPracticeName ? ` | Sub-practice of ${task.parentPracticeName}` : ''}
                     </Text>
                     <Text style={styles.taskMeta}>
-                      {task.metrics[0]?.name ?? 'No metric'} {task.metrics[0]?.metricType ? `(${task.metrics[0].metricType})` : ''}
-                      {task.metrics.length > 1 ? ` + ${task.metrics.length - 1} sub-practice${task.metrics.length === 2 ? '' : 's'}` : ''}
+                      {task.metrics.find((metric) => metric.isPrimary === 1)?.name ?? 'No primary metric'}
+                      {task.metrics.filter((metric) => metric.isPrimary !== 1).length
+                        ? ` + ${task.metrics.filter((metric) => metric.isPrimary !== 1).length} sub-practice${task.metrics.filter((metric) => metric.isPrimary !== 1).length === 1 ? '' : 's'}`
+                        : ''}
                       {' | '}{task.enabled ? 'active' : 'hidden'}
                       {task.weeklyTarget ? ` | weekly goal ${task.weeklyTarget}x` : ''}
                     </Text>
@@ -515,7 +520,14 @@ export default function PracticesScreen() {
           )) : <Text style={styles.emptyText}>No practices match that search.</Text>}
         </View>
       ) : (
-        <TaskForm form={form} options={options} reminderPreferences={reminderPreferences} setForm={setForm} />
+        <TaskForm
+          currentPracticeId={editing?.practiceId ?? null}
+          form={form}
+          options={options}
+          reminderPreferences={reminderPreferences}
+          setForm={setForm}
+          showParentPicker={mode === 'edit'}
+        />
       )}
 
       {mode !== 'list' ? (
@@ -551,19 +563,27 @@ async function syncedMessage(baseMessage: string) {
 }
 
 function TaskForm({
+  currentPracticeId,
   form,
   options,
   reminderPreferences,
   setForm,
+  showParentPicker,
 }: {
+  currentPracticeId: string | null;
   form: typeof emptyForm;
   options: Options;
   reminderPreferences: ReminderPreferences;
   setForm: React.Dispatch<React.SetStateAction<PracticeFormState>>;
+  showParentPicker: boolean;
 }) {
   const domainChoices = useMemo(() => options.domains, [options.domains]);
+  const parentChoices = useMemo(
+    () => [{ id: '', name: 'Top-level practice' }, ...options.parentPractices.filter((practice) => practice.id !== currentPracticeId)],
+    [currentPracticeId, options.parentPractices],
+  );
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const weeklyGoalAvailable = form.metricKind === 'completed';
+  const weeklyGoalAvailable = form.primaryMetricEnabled && form.metricKind === 'completed';
   return (
     <View style={styles.form}>
       <Field label="Practice name">
@@ -585,43 +605,74 @@ function TaskForm({
         />
       </Field>
       <Field label="Primary metric">
-        <ChoiceGrid
-          choices={metricOptions}
-          selectedId={form.metricKind}
-          onSelect={(metricKind) =>
+        <Toggle
+          label={form.primaryMetricEnabled ? 'Primary metric on' : 'No primary metric'}
+          selected={form.primaryMetricEnabled}
+          onPress={() =>
             setForm((current) => ({
               ...current,
-              metricKind: metricKind as MetricKind,
-              metricName: shouldUseDefaultMetricName(current.metricName, current.metricKind)
-                ? defaultMetricName(metricKind as MetricKind)
-                : current.metricName,
-              metricOptions:
-                metricKind === 'choice' && current.metricOptions.length < 2
-                  ? defaultChoiceOptions()
-                  : current.metricOptions,
-              weeklyGoalEnabled: metricKind === 'completed' ? current.weeklyGoalEnabled : false,
-              weeklyTarget: metricKind === 'completed' ? current.weeklyTarget : '',
+              primaryMetricEnabled: !current.primaryMetricEnabled,
+              weeklyGoalEnabled: current.primaryMetricEnabled ? false : current.weeklyGoalEnabled,
+              weeklyTarget: current.primaryMetricEnabled ? '' : current.weeklyTarget,
             }))
           }
         />
-        <TextInput
-          onChangeText={(metricName) => setForm((current) => ({ ...current, metricName }))}
-          placeholder="Metric label"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          value={form.metricName}
-        />
-        {form.metricKind === 'choice' ? (
-          <ChoiceOptionsEditor
-            options={form.metricOptions}
-            onChange={(metricOptions) => setForm((current) => ({ ...current, metricOptions }))}
-          />
+        <Text style={styles.subPracticeHelp}>Turn this off when the parent is only a heading for its sub-practices.</Text>
+        {form.primaryMetricEnabled ? (
+          <>
+            <ChoiceGrid
+              choices={metricOptions}
+              selectedId={form.metricKind}
+              onSelect={(metricKind) =>
+                setForm((current) => ({
+                  ...current,
+                  metricKind: metricKind as MetricKind,
+                  metricName: shouldUseDefaultMetricName(current.metricName, current.metricKind)
+                    ? defaultMetricName(metricKind as MetricKind)
+                    : current.metricName,
+                  metricOptions:
+                    metricKind === 'choice' && current.metricOptions.length < 2
+                      ? defaultChoiceOptions()
+                      : current.metricOptions,
+                  weeklyGoalEnabled: metricKind === 'completed' ? current.weeklyGoalEnabled : false,
+                  weeklyTarget: metricKind === 'completed' ? current.weeklyTarget : '',
+                }))
+              }
+            />
+            <TextInput
+              onChangeText={(metricName) => setForm((current) => ({ ...current, metricName }))}
+              placeholder="Metric label"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              value={form.metricName}
+            />
+            {form.metricKind === 'choice' ? (
+              <ChoiceOptionsEditor
+                options={form.metricOptions}
+                onChange={(metricOptions) => setForm((current) => ({ ...current, metricOptions }))}
+              />
+            ) : null}
+          </>
         ) : null}
       </Field>
       <SubPracticeEditor
+        domains={domainChoices}
+        fallbackDomainId={form.domainId}
         subPractices={form.subPractices}
         onChange={(subPractices) => setForm((current) => ({ ...current, subPractices }))}
       />
+      {showParentPicker ? (
+        <Field label="Practice structure">
+          <Text style={styles.subPracticeHelp}>
+            Move this practice under another one without changing its ID or history. Its original routine placement is kept if you move it back later.
+          </Text>
+          <ChoiceGrid
+            choices={parentChoices}
+            selectedId={form.parentPracticeId}
+            onSelect={(parentPracticeId) => setForm((current) => ({ ...current, parentPracticeId }))}
+          />
+        </Field>
+      ) : null}
       <Field label="Routine">
         <ChoiceGrid choices={options.routines} selectedId={form.routineId} onSelect={(routineId) => setForm((current) => ({ ...current, routineId }))} />
       </Field>
@@ -637,30 +688,9 @@ function TaskForm({
       </Field>
       <View style={styles.fieldStack}>
         <View style={styles.optionRow}>
-          <Toggle
-            label={form.blockersEnabled ? 'Blockers' : 'No blockers'}
-            selected={form.blockersEnabled}
-            onPress={() =>
-              setForm((current) => {
-                const blockersEnabled = !current.blockersEnabled;
-                return {
-                  ...current,
-                  blockersEnabled,
-                  blockerIds: blockersEnabled ? options.blockers.map((blocker) => blocker.id) : [],
-                };
-              })
-            }
-          />
           <Toggle label={form.allowNote ? 'Note' : 'No note'} selected={form.allowNote} onPress={() => setForm((current) => ({ ...current, allowNote: !current.allowNote }))} />
           <Toggle label={form.enabled ? 'Active' : 'Inactive'} selected={form.enabled} onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))} />
         </View>
-        {form.blockersEnabled ? (
-          <MultiChoiceGrid
-            choices={options.blockers}
-            selectedIds={form.blockerIds}
-            onChange={(blockerIds) => setForm((current) => ({ ...current, blockerIds }))}
-          />
-        ) : null}
       </View>
       {reminderPreferences.taskRemindersEnabled ? (
         <View style={styles.optionRow}>
@@ -726,9 +756,13 @@ function TaskForm({
 }
 
 function SubPracticeEditor({
+  domains,
+  fallbackDomainId,
   subPractices,
   onChange,
 }: {
+  domains: Array<{ id: string; name: string }>;
+  fallbackDomainId: string;
   subPractices: PracticeMetricDraft[];
   onChange: (subPractices: PracticeMetricDraft[]) => void;
 }) {
@@ -762,7 +796,7 @@ function SubPracticeEditor({
         </View>
         <Pressable
           accessibilityRole="button"
-          onPress={() => onChange([...subPractices, newPracticeMetricDraft()])}
+          onPress={() => onChange([...subPractices, newPracticeMetricDraft(fallbackDomainId)])}
           style={styles.addSubPracticeButton}
         >
           <CirclePlus color={colors.blue} size={17} />
@@ -815,6 +849,14 @@ function SubPracticeEditor({
             selectedId={subPractice.metricKind}
             onSelect={(metricKind) => updateKind(index, metricKind as MetricKind)}
           />
+          <View style={styles.metricDomainField}>
+            <Text style={styles.label}>Tag / domain</Text>
+            <ChoiceGrid
+              choices={domains}
+              selectedId={subPractice.domainId || fallbackDomainId}
+              onSelect={(domainId) => update(index, { domainId })}
+            />
+          </View>
           {subPractice.metricKind === 'choice' ? (
             <ChoiceOptionsEditor
               options={subPractice.options}
@@ -975,13 +1017,14 @@ function defaultChoiceOptions() {
   return [newMetricOptionDraft('Yes', 'yes'), newMetricOptionDraft('No', 'no')];
 }
 
-function newPracticeMetricDraft(): PracticeMetricDraft {
+function newPracticeMetricDraft(domainId: string): PracticeMetricDraft {
   return {
     key: draftKey('subpractice'),
     id: null,
     name: '',
     metricKind: 'completed',
     options: [],
+    domainId,
   };
 }
 
@@ -996,6 +1039,7 @@ function toPracticeMetricDraft(metric: TaskRow['metrics'][number]): PracticeMetr
     name: metric.name,
     metricKind: metricTypeToKind(metric.metricType),
     options: toMetricOptionDrafts(metric.options),
+    domainId: metric.domainId ?? '',
   };
 }
 
@@ -1006,14 +1050,19 @@ function formMetricFromPrimary(form: PracticeFormState): PracticeMetricDraft {
     name: form.metricName,
     metricKind: form.metricKind,
     options: form.metricOptions,
+    domainId: form.domainId,
   };
 }
 
 function metricsFromForm(form: PracticeFormState): EditablePracticeMetric[] {
-  return [formMetricFromPrimary(form), ...form.subPractices].map((metric) => ({
+  const metrics = [form.primaryMetricEnabled ? formMetricFromPrimary(form) : null, ...form.subPractices]
+    .filter((metric): metric is PracticeMetricDraft => metric != null);
+  return metrics.map((metric, index) => ({
     id: metric.id,
     name: metric.name.trim(),
     metricType: metricKindToType(metric.metricKind),
+    domainId: index === 0 && form.primaryMetricEnabled ? null : metric.domainId || form.domainId,
+    isPrimary: index === 0 && form.primaryMetricEnabled,
     options: metric.options
       .filter((option) => option.label.trim())
       .map((option) => ({ id: option.id, label: option.label.trim(), value: option.value })),
@@ -1021,7 +1070,7 @@ function metricsFromForm(form: PracticeFormState): EditablePracticeMetric[] {
 }
 
 function weeklyTargetFromForm(form: PracticeFormState) {
-  if (form.metricKind !== 'completed' || !form.weeklyGoalEnabled) return null;
+  if (!form.primaryMetricEnabled || form.metricKind !== 'completed' || !form.weeklyGoalEnabled) return null;
   const target = Number(form.weeklyTarget);
   if (!Number.isFinite(target) || target < 1) return null;
   return Math.min(7, Math.round(target));
@@ -1231,6 +1280,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   subPracticeNumber: { color: colors.muted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  metricDomainField: { gap: spacing.sm },
   subPracticeActions: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
   smallIconButton: {
     alignItems: 'center',

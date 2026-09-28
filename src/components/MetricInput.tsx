@@ -108,6 +108,7 @@ function MetricFrame({ metric, subPractice, children }: { metric: Metric; subPra
       <Text style={styles.label}>
         {metric.name}
       </Text>
+      {subPractice && metric.domainName ? <Text style={styles.domain}>{metric.domainName}</Text> : null}
       {metric.helpText ? <Text style={styles.help}>{metric.helpText}</Text> : null}
       {children}
     </View>
@@ -156,6 +157,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     lineHeight: 18,
+  },
+  domain: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '800',
   },
   row: {
     flexDirection: 'row',

@@ -6,13 +6,10 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { colors, spacing } from '@/src/components/ui';
 import {
   deactivateDomain,
-  createBlocker,
   createDomain,
   exportReadableData,
-  getBlockerEditorRows,
   getDomainEditorRows,
   getReminderPreferences,
-  updateBlocker,
   updateDomain,
   updateReminderPreferences,
   type ReminderPreferences,
@@ -41,14 +38,12 @@ import {
 import { clearAccessHandleBusyRecovery, scheduleAccessHandleBusyReload } from '@/src/utils/accessHandleRecovery';
 
 type DomainRow = { id: string; name: string; description: string | null; active: number; inUse: number };
-type BlockerRow = { id: string; name: string; description: string | null; active: number };
 
 export default function SettingsScreen() {
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [domainRows, setDomainRows] = useState<DomainRow[]>([]);
-  const [blockerRows, setBlockerRows] = useState<BlockerRow[]>([]);
   const [authMode, setAuthMode] = useState<'signIn' | 'create' | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -84,16 +79,14 @@ export default function SettingsScreen() {
     let nextGoogleDriveStatus: GoogleDriveStatus | null;
     let nextReminderPreferences: ReminderPreferences;
     let nextDomainRows: DomainRow[];
-    let nextBlockerRows: BlockerRow[];
     try {
-      [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextBlockerRows, nextGoogleDriveStatus] = await Promise.all([
+      [nextCloudStatus, nextReminderPreferences, nextDomainRows, nextGoogleDriveStatus] = await Promise.all([
         getCloudStatus().catch((error) => {
           cloudStatusMessage = error instanceof Error ? error.message : 'Could not load account status.';
           return { configured: true, signedIn: oauthCompleted, email: null, name: null, lastSyncedAt: null };
         }),
         getReminderPreferences(),
         getDomainEditorRows(),
-        getBlockerEditorRows(),
         getGoogleDriveStatus().catch(() => null),
       ]);
     } catch (error) {
@@ -104,7 +97,6 @@ export default function SettingsScreen() {
     setGoogleDriveStatus(nextGoogleDriveStatus);
     setReminderPreferences(nextReminderPreferences);
     setDomainRows(nextDomainRows);
-    setBlockerRows(nextBlockerRows);
     clearAccessHandleBusyRecovery();
     if (cloudStatusMessage) setMessage(cloudStatusMessage);
   }, [recoverFromAccessHandleError]);
@@ -116,7 +108,6 @@ export default function SettingsScreen() {
       setCloudStatus({ configured: true, signedIn: false, email: null, name: null, lastSyncedAt: null });
       setReminderPreferences({ taskRemindersEnabled: false, morningReminderEnabled: true, morningReminderTime: '05:30' });
       setDomainRows([]);
-      setBlockerRows([]);
       setGoogleDriveStatus(null);
     });
   }, [load, recoverFromAccessHandleError]);
@@ -193,7 +184,7 @@ export default function SettingsScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <Text style={styles.subtitle}>Account, tutorial, domains, blockers, and email reminders.</Text>
+        <Text style={styles.subtitle}>Account, tutorial, domains, and email reminders.</Text>
       </View>
 
       <View style={styles.cloudBox}>
@@ -316,7 +307,6 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
       <EditableDomains rows={domainRows} onReload={load} setMessage={setMessage} />
-      <EditableBlockers rows={blockerRows} onReload={load} setMessage={setMessage} />
       <ReminderSettings
         preferences={reminderPreferences}
         onChange={setReminderPreferences}
@@ -556,7 +546,7 @@ function TutorialSection() {
     {
       title: 'Practices',
       text:
-        'A practice is one thing you review, such as Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah. When creating one, choose its metric, routine, part of day, domain, blockers, whether notes are allowed, whether it is active, and optional reminder settings.',
+        'A practice is one thing you review, such as Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah. When creating one, choose its metric, routine, part of day, domain, whether notes are allowed, whether it is active, and optional reminder settings. A practice can also contain sub-practices with their own metrics and domains.',
     },
     {
       title: 'Metrics',
@@ -576,22 +566,17 @@ function TutorialSection() {
     {
       title: 'Creating a practice',
       text:
-        'Open Practices, press Add Practice, enter the name, choose the domain and review section, pick the routine it belongs to, and select the metric type. Then decide if the practice should allow notes, use blockers, be markable for tomorrow, and be active right away.',
+        'Open Practices, press Add Practice, enter the name, choose the domain and review section, pick the routine it belongs to, and select the metric type. Then decide if the practice should allow notes, be markable for tomorrow, and be active right away. Advanced settings let you add sub-practices, give each one its own domain, or use only sub-practices without a primary metric.',
     },
     {
       title: 'Editing practices',
       text:
-        'Open Practices and select a practice to edit its name, domain, routine, review section, metric, note setting, blockers, reminder setting, or active status. Use Remove from the edit screen when you want it gone from today forward.',
+        'Open Practices and select a practice to edit its name, domain, routine, review section, metrics, note setting, reminder setting, or active status. You can also place an existing practice under another practice without losing its prior answers or trends. Use Remove from the edit screen when you want it gone from today forward.',
     },
     {
       title: 'Rearranging practices',
       text:
         'On the Practices page, press Rearrange, choose the routine you want to adjust, and use the up and down buttons to order practices inside that routine. Each review section is ordered separately.',
-    },
-    {
-      title: 'Blockers',
-      text:
-        'Blockers explain what got in the way, like tired, rushed, phone, stress, or lack of planning. A practice can use all blockers, only some blockers, or no blockers. Edit the blocker list in Settings, and customize which blockers apply on each practice.',
     },
     {
       title: 'Notes',
@@ -760,100 +745,6 @@ function DomainEditor({
       <View style={styles.actions}>
         <ActionButton icon={<Save color={colors.ink} size={17} />} label="Save" onPress={save} />
         <ActionButton disabled={row.inUse === 1} icon={<Trash2 color={colors.rose} size={17} />} label={row.inUse ? 'In use' : 'Delete'} onPress={remove} />
-      </View>
-    </View>
-  );
-}
-
-function EditableBlockers({
-  rows,
-  onReload,
-  setMessage,
-}: {
-  rows: BlockerRow[];
-  onReload: () => Promise<void>;
-  setMessage: (message: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <View style={styles.section}>
-      <DisclosureHeader open={open} title="Blockers" onPress={() => setOpen((value) => !value)} />
-      {open ? (
-        <View style={styles.list}>
-          <NewBlockerEditor onReload={onReload} setMessage={setMessage} />
-          {rows.map((row) => (
-            <BlockerEditor key={row.id} row={row} onReload={onReload} setMessage={setMessage} />
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function NewBlockerEditor({
-  onReload,
-  setMessage,
-}: {
-  onReload: () => Promise<void>;
-  setMessage: (message: string | null) => void;
-}) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  async function add() {
-    if (!name.trim()) {
-      setMessage('Blocker name is required.');
-      return;
-    }
-    try {
-      await createBlocker({ name, description });
-      setName('');
-      setDescription('');
-      setMessage(await syncedMessage('Blocker added.'));
-      await onReload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not add blocker.');
-    }
-  }
-  return (
-    <View style={[styles.editorRow, styles.newEditorRow]}>
-      <Text style={styles.smallTitle}>Add blocker</Text>
-      <TextInput onChangeText={setName} placeholder="Blocker name" placeholderTextColor={colors.muted} style={styles.input} value={name} />
-      <TextInput onChangeText={setDescription} placeholder="Description" placeholderTextColor={colors.muted} style={styles.input} value={description} />
-      <View style={styles.actions}>
-        <ActionButton icon={<Plus color={colors.ink} size={17} />} label="Add blocker" onPress={add} />
-      </View>
-    </View>
-  );
-}
-
-function BlockerEditor({
-  row,
-  onReload,
-  setMessage,
-}: {
-  row: BlockerRow;
-  onReload: () => Promise<void>;
-  setMessage: (message: string | null) => void;
-}) {
-  const [name, setName] = useState(row.name);
-  const [description, setDescription] = useState(row.description ?? '');
-  const [active, setActive] = useState(row.active === 1);
-  async function save() {
-    try {
-      await updateBlocker({ id: row.id, name, description, active });
-      setMessage(await syncedMessage('Blocker updated.'));
-      await onReload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not update blocker.');
-    }
-  }
-  return (
-    <View style={styles.editorRow}>
-      <TextInput onChangeText={setName} placeholder="Blocker name" placeholderTextColor={colors.muted} style={styles.input} value={name} />
-      <TextInput onChangeText={setDescription} placeholder="Description" placeholderTextColor={colors.muted} style={styles.input} value={description} />
-      <View style={styles.actions}>
-        <ActionButton icon={<Save color={colors.ink} size={17} />} label="Save" onPress={save} />
-        <ActionButton label={active ? 'Active' : 'Hidden'} onPress={() => setActive((value) => !value)} icon={<RefreshCw color={colors.ink} size={17} />} />
       </View>
     </View>
   );

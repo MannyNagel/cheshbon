@@ -2,16 +2,15 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PracticeEntryCard } from '@/src/components/PracticeEntryCard';
 import { colors, spacing } from '@/src/components/ui';
-import type { Blocker, EntryDraft, NightlyReviewSection as NightlySection } from '@/src/models/types';
+import type { EntryDraft, NightlyReviewSection as NightlySection } from '@/src/models/types';
 
 type Props = {
   section: NightlySection;
-  blockers: Blocker[];
   entries: Record<string, EntryDraft>;
   onEntryChange: (entry: EntryDraft) => void;
 };
 
-export function ReviewSection({ section, blockers, entries, onEntryChange }: Props) {
+export function ReviewSection({ section, entries, onEntryChange }: Props) {
   const groups = section.id === 'section_overall' ? groupOverviewItems(section.items) : [{ title: null, items: section.items }];
 
   return (
@@ -26,8 +25,7 @@ export function ReviewSection({ section, blockers, entries, onEntryChange }: Pro
             {group.title ? <Text style={styles.groupTitle}>{group.title}</Text> : null}
             {group.items.map((item) => (
               <PracticeEntryCard
-                blockers={blockers}
-                draft={entries[item.practiceId]}
+                entries={entries}
                 item={item}
                 key={item.practiceId}
                 onChange={onEntryChange}

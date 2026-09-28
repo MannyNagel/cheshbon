@@ -34,13 +34,6 @@ type SessionRow = {
   completed_at: string | null;
 };
 
-type BlockerRow = {
-  entry_date: string;
-  blocker_name: string;
-  practice_name: string;
-  domain_name: string;
-};
-
 type ScoreSummary = {
   id: string;
   name: string;
@@ -92,7 +85,6 @@ export type WeeklyReportData = {
     notes: string[];
     textReflections: Array<{ practiceName: string; domainName: string; text: string }>;
   }>;
-  blockers: Array<{ blockerName: string; count: number; practices: string[]; domains: string[] }>;
   rawEntries: Array<{
     date: string;
     domainName: string;
@@ -206,18 +198,22 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
   const { weekStart, weekEnd, reportThrough } = period;
   const previousWeekStart = addDaysIso(weekStart, -7);
   const previousWeekEnd = addDaysIso(weekStart, -1);
-  const [currentRows, previousRows, sessions, blockerRows] = await Promise.all([
+  const [currentRows, previousRows, sessions] = await Promise.all([
     getScoreRows(weekStart, reportThrough),
     getScoreRows(previousWeekStart, previousWeekEnd),
     getSessions(weekStart, reportThrough),
-    getBlockers(weekStart, reportThrough),
   ]);
 
   const currentDomains = summarizeScores(currentRows, (row) => row.domain_id, (row) => row.domain_name);
   const previousDomains = summarizeScores(previousRows, (row) => row.domain_id, (row) => row.domain_name);
   const currentPractices = summarizeScores(currentRows, (row) => row.practice_id, (row) => row.practice_name);
   const previousPractices = summarizeScores(previousRows, (row) => row.practice_id, (row) => row.practice_name);
-  const domainByPractice = new Map(currentRows.map((row) => [row.practice_id, row.domain_name]));
+  const domainsByPractice = new Map<string, Set<string>>();
+  for (const row of currentRows) {
+    const names = domainsByPractice.get(row.practice_id) ?? new Set<string>();
+    names.add(row.domain_name);
+    domainsByPractice.set(row.practice_id, names);
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -230,10 +226,12 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
     previousWeekLabel: `${monthDay(previousWeekStart)} - ${monthDay(previousWeekEnd)}`,
     domains: attachComparison(currentDomains, previousDomains).sort(sortByDeltaThenName),
     practices: attachComparison(currentPractices, previousPractices)
-      .map((practice) => ({ ...practice, domainName: domainByPractice.get(practice.id) ?? 'Domain' }))
+      .map((practice) => ({
+        ...practice,
+        domainName: [...(domainsByPractice.get(practice.id) ?? new Set(['Domain']))].sort().join(', '),
+      }))
       .sort(sortByDeltaThenName),
     daily: buildDailySummaries(weekStart, reportThrough, currentRows, sessions),
-    blockers: summarizeBlockers(blockerRows),
     rawEntries: currentRows.map((row) => ({
       date: row.entry_date,
       domainName: row.domain_name,
@@ -302,9 +300,6 @@ export function formatWeeklyReportData(data: WeeklyReportData) {
     '## Daily Reviews',
     ...data.daily.flatMap(formatDailyReview),
     '',
-    '## Blockers',
-    ...formatBlockerRows(data.blockers),
-    '',
     '## Practice Entries',
     ...formatEntryRows(data.rawEntries),
     '',
@@ -366,15 +361,6 @@ function formatDailyReview(day: WeeklyReportData['daily'][number]) {
     }
   }
   return [...lines, ''];
-}
-
-function formatBlockerRows(rows: WeeklyReportData['blockers']) {
-  if (!rows.length) return ['No blockers recorded.'];
-  return rows.map((row) => {
-    const practices = row.practices.length ? `; practices: ${row.practices.join(', ')}` : '';
-    const domains = row.domains.length ? `; domains: ${row.domains.join(', ')}` : '';
-    return `- ${row.blockerName}: ${row.count}${practices}${domains}`;
-  });
 }
 
 function formatEntryRows(rows: WeeklyReportData['rawEntries']) {
@@ -443,8 +429,8 @@ async function getScoreRows(startDate: string, endDate: string) {
       de.id as entry_id,
       p.id as practice_id,
       p.name as practice_name,
-      d.id as domain_id,
-      d.name as domain_name,
+      COALESCE(md.id, d.id) as domain_id,
+      COALESCE(md.name, d.name) as domain_name,
       m.name as metric_name,
       m.metric_type,
       emv.value_boolean,
@@ -456,6 +442,7 @@ async function getScoreRows(startDate: string, endDate: string) {
      JOIN practices p ON p.id = de.practice_id
      JOIN domains d ON d.id = p.domain_id
      LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+     LEFT JOIN domains md ON md.id = m.domain_id AND md.active = 1
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
      WHERE de.entry_date >= ?
       AND de.entry_date <= ?
@@ -482,27 +469,6 @@ async function getSessions(startDate: string, endDate: string) {
      WHERE review_date >= ?
       AND review_date <= ?
      ORDER BY review_date`,
-    startDate,
-    endDate,
-  );
-}
-
-async function getBlockers(startDate: string, endDate: string) {
-  const db = await getDb();
-  return db.getAllAsync<BlockerRow>(
-    `SELECT de.entry_date,
-      b.name as blocker_name,
-      p.name as practice_name,
-      d.name as domain_name
-     FROM entry_blockers eb
-     JOIN blockers b ON b.id = eb.blocker_id
-     JOIN daily_entries de ON de.id = eb.entry_id
-     JOIN practices p ON p.id = de.practice_id
-     JOIN domains d ON d.id = p.domain_id
-     WHERE de.entry_date >= ?
-      AND de.entry_date <= ?
-      AND eb.enabled = 1
-     ORDER BY de.entry_date, b.name`,
     startDate,
     endDate,
   );
@@ -589,30 +555,6 @@ function buildDailySummaries(startDate: string, endDate: string, rows: ScoreRow[
     });
   }
   return summaries;
-}
-
-function summarizeBlockers(rows: BlockerRow[]) {
-  const map = new Map<string, { blockerName: string; count: number; practices: Set<string>; domains: Set<string> }>();
-  for (const row of rows) {
-    const item = map.get(row.blocker_name) ?? {
-      blockerName: row.blocker_name,
-      count: 0,
-      practices: new Set<string>(),
-      domains: new Set<string>(),
-    };
-    item.count += 1;
-    item.practices.add(row.practice_name);
-    item.domains.add(row.domain_name);
-    map.set(row.blocker_name, item);
-  }
-  return [...map.values()]
-    .map((item) => ({
-      blockerName: item.blockerName,
-      count: item.count,
-      practices: [...item.practices].sort(),
-      domains: [...item.domains].sort(),
-    }))
-    .sort((a, b) => b.count - a.count || a.blockerName.localeCompare(b.blockerName));
 }
 
 function scoreRow(row: ScoreRow) {

@@ -169,7 +169,6 @@ export default function WeeklyReportScreen() {
           <SummaryPill label="Domains" value={String(data.domains.length)} />
           <SummaryPill label="Practices" value={String(data.practices.length)} />
           <SummaryPill label="Days reviewed" value={String(data.daily.filter((day) => day.completed).length)} />
-          <SummaryPill label="Blockers" value={String(data.blockers.reduce((sum, blocker) => sum + blocker.count, 0))} />
         </View>
       ) : null}
 
@@ -223,7 +222,7 @@ export default function WeeklyReportScreen() {
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No generated report yet</Text>
           <Text style={styles.emptyText}>
-            Generate the report after your Saturday review to get an AI-written synthesis of domains, practices, notes, blockers, and reflections.
+            Generate the report after your Saturday review to get an AI-written synthesis of domains, practices, notes, and reflections.
           </Text>
         </View>
       )}

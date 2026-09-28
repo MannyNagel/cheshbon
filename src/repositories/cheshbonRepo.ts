@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
-import { ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
+import { ensureMetricPrimaryFlags, ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
 import type {
   Blocker,
@@ -28,6 +28,9 @@ type MetricRow = {
   required: number;
   help_text: string | null;
   sort_order: number;
+  domain_id: string | null;
+  domain_name: string | null;
+  is_primary: number;
 };
 type MetricOptionRow = { id: string; metric_id: string; label: string; value: string; sort_order: number };
 
@@ -35,6 +38,8 @@ export type EditablePracticeMetric = {
   id?: string | null;
   name: string;
   metricType: Metric['metricType'];
+  domainId?: string | null;
+  isPrimary: boolean;
   options?: Array<{
     id?: string | null;
     label: string;
@@ -454,7 +459,11 @@ export async function getMetricsForPracticeIds(practiceIds: string[]) {
   const db = await getDb();
   const placeholders = practiceIds.map(() => '?').join(',');
   const metricRows = await db.getAllAsync<MetricRow>(
-    `SELECT * FROM metrics WHERE active = 1 AND practice_id IN (${placeholders}) ORDER BY sort_order`,
+    `SELECT m.*, d.name as domain_name
+     FROM metrics m
+     LEFT JOIN domains d ON d.id = m.domain_id
+     WHERE m.active = 1 AND m.practice_id IN (${placeholders})
+     ORDER BY m.sort_order`,
     practiceIds,
   );
   const metricIds = metricRows.map((row) => row.id);
@@ -489,6 +498,9 @@ export async function getMetricsForPracticeIds(practiceIds: string[]) {
       required: row.required === 1,
       helpText: row.help_text,
       sortOrder: row.sort_order,
+      domainId: row.domain_id,
+      domainName: row.domain_name,
+      isPrimary: row.is_primary === 1,
       options: optionsByMetric.get(row.id) ?? [],
     });
     byPractice.set(row.practice_id, list);
@@ -910,13 +922,15 @@ export async function getSettingsSnapshot() {
 
 export async function getTaskFormOptions() {
   const db = await getDb();
-  const [domains, routines, reviewSections, blockers] = await Promise.all([
+  const [domains, routines, reviewSections, parentPractices] = await Promise.all([
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM domains WHERE active = 1 ORDER BY sort_order'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM routine_templates WHERE deleted_at IS NULL ORDER BY active DESC, priority, name'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM review_sections WHERE active = 1 ORDER BY sort_order'),
-    db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM blockers WHERE active = 1 ORDER BY name'),
+    db.getAllAsync<{ id: string; name: string }>(
+      'SELECT id, name FROM practices WHERE active = 1 AND parent_practice_id IS NULL ORDER BY name',
+    ),
   ]);
-  return { domains, routines, reviewSections, blockers };
+  return { domains, routines, reviewSections, parentPractices };
 }
 
 export async function getTasksForManagement() {
@@ -939,6 +953,8 @@ export async function getTasksForManagement() {
     enabled: number;
     sortOrder: number;
     archivedFrom: string | null;
+    parentPracticeId: string | null;
+    parentPracticeName: string | null;
   }>(
     `SELECT
       rp.id as routinePracticeId,
@@ -958,11 +974,14 @@ export async function getTasksForManagement() {
       rp.enabled,
       rp.sort_order as sortOrder,
       rp.archived_from as archivedFrom
+      ,p.parent_practice_id as parentPracticeId
+      ,parent.name as parentPracticeName
      FROM routine_practices rp
      JOIN practices p ON p.id = rp.practice_id
      JOIN domains d ON d.id = p.domain_id
      JOIN routine_templates rt ON rt.id = rp.routine_template_id
      JOIN review_sections rs ON rs.id = rp.review_section_id
+     LEFT JOIN practices parent ON parent.id = p.parent_practice_id
      WHERE rp.archived_from IS NULL
      ORDER BY rt.priority, rt.name, rs.sort_order, rp.sort_order`,
   );
@@ -976,11 +995,16 @@ export async function getTasksForManagement() {
         scale_min: number | null;
         scale_max: number | null;
         sort_order: number;
+        domain_id: string | null;
+        domain_name: string | null;
+        is_primary: number;
       }>(
-        `SELECT id, practice_id, name, metric_type, scale_min, scale_max, sort_order
-         FROM metrics
-         WHERE active = 1 AND practice_id IN (${practiceIds.map(() => '?').join(',')})
-         ORDER BY sort_order`,
+        `SELECT m.id, m.practice_id, m.name, m.metric_type, m.scale_min, m.scale_max,
+          m.sort_order, m.domain_id, d.name as domain_name, m.is_primary
+         FROM metrics m
+         LEFT JOIN domains d ON d.id = m.domain_id
+         WHERE m.active = 1 AND m.practice_id IN (${practiceIds.map(() => '?').join(',')})
+         ORDER BY m.sort_order`,
         practiceIds,
       )
     : [];
@@ -1007,6 +1031,9 @@ export async function getTasksForManagement() {
     scaleMin: number | null;
     scaleMax: number | null;
     sortOrder: number;
+    domainId: string | null;
+    domainName: string | null;
+    isPrimary: number;
     options: Array<{ id: string; label: string; value: string }>;
   }>>();
   for (const metric of metricRows) {
@@ -1018,31 +1045,16 @@ export async function getTasksForManagement() {
       scaleMin: metric.scale_min,
       scaleMax: metric.scale_max,
       sortOrder: metric.sort_order,
+      domainId: metric.domain_id,
+      domainName: metric.domain_name,
+      isPrimary: metric.is_primary,
       options: optionsByMetric.get(metric.id) ?? [],
     });
     metricsByPractice.set(metric.practice_id, list);
   }
-  const blockerRows = practiceIds.length
-    ? await db.getAllAsync<{ practice_id: string; blocker_id: string; enabled: number }>(
-        `SELECT practice_id, blocker_id, enabled FROM practice_blockers WHERE practice_id IN (${practiceIds.map(() => '?').join(',')})`,
-        practiceIds,
-      )
-    : [];
-  const blockersByPractice = new Map<string, string[]>();
-  const customizedBlockerPractices = new Set<string>();
-  for (const row of blockerRows) {
-    customizedBlockerPractices.add(row.practice_id);
-    if (row.enabled === 1) {
-      const list = blockersByPractice.get(row.practice_id) ?? [];
-      list.push(row.blocker_id);
-      blockersByPractice.set(row.practice_id, list);
-    }
-  }
   return rows.map((row) => ({
     ...row,
     metrics: metricsByPractice.get(row.practiceId) ?? [],
-    blockerIds: blockersByPractice.get(row.practiceId) ?? [],
-    blockersConfigured: customizedBlockerPractices.has(row.practiceId) ? 1 : 0,
     protectedFromRemoval: isHomeFunctionPractice({ id: row.practiceId, name: row.name, domainId: row.domainId }) ? 1 : 0,
   }));
 }
@@ -1095,10 +1107,10 @@ export async function updateTask(input: {
   allowNote: boolean;
   markable: boolean;
   weeklyTarget?: number | null;
-  blockerIds?: string[];
+  parentPracticeId?: string | null;
 }) {
   const db = await getDb();
-  if (!input.metrics.length) throw new Error('A practice needs a primary metric.');
+  await validateParentPractice(db, input.practiceId, input.parentPracticeId);
   const currentPlacement = await db.getFirstAsync<{
     routine_template_id: string;
     review_section_id: string;
@@ -1108,16 +1120,22 @@ export async function updateTask(input: {
     currentPlacement?.routine_template_id === input.routineId && currentPlacement.review_section_id === input.reviewSectionId
       ? currentPlacement.sort_order
       : await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
+  const parentSortOrder = await nextParentSortOrder(db, input.practiceId, input.parentPracticeId);
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'UPDATE practices SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, weekly_target = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      `UPDATE practices
+       SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, weekly_target = ?,
+         parent_practice_id = ?, parent_sort_order = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
       input.name.trim(),
       input.description?.trim() || null,
       input.domainId,
       input.allowNote ? 1 : 0,
       input.markable ? 1 : 0,
       normalizeWeeklyTarget(input.weeklyTarget),
+      input.parentPracticeId || null,
+      parentSortOrder,
       input.practiceId,
     );
     await db.runAsync(
@@ -1132,7 +1150,6 @@ export async function updateTask(input: {
       input.routinePracticeId,
     );
     await replacePracticeMetrics(db, input.practiceId, input.metrics);
-    await replacePracticeBlockers(db, input.practiceId, input.blockerIds);
   });
 }
 
@@ -1147,10 +1164,8 @@ export async function createTask(input: {
   allowNote: boolean;
   markable: boolean;
   weeklyTarget?: number | null;
-  blockerIds?: string[];
 }) {
   const db = await getDb();
-  if (!input.metrics.length) throw new Error('A practice needs a primary metric.');
   const practiceId = makeId('practice');
   const routinePracticeId = makeId('routine_practice');
   const sortOrder = await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
@@ -1179,8 +1194,45 @@ export async function createTask(input: {
       0,
       input.enabled === false ? 0 : 1,
     );
-    await replacePracticeBlockers(db, practiceId, input.blockerIds);
   });
+}
+
+async function validateParentPractice(
+  db: Awaited<ReturnType<typeof getDb>>,
+  practiceId: string,
+  parentPracticeId?: string | null,
+) {
+  if (!parentPracticeId) return;
+  if (parentPracticeId === practiceId) throw new Error('A practice cannot be its own parent.');
+  const child = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM practices WHERE parent_practice_id = ? AND active = 1 LIMIT 1',
+    practiceId,
+  );
+  if (child) throw new Error('Move this practice\'s existing sub-practices first. Nested sub-practices are not supported.');
+  const parent = await db.getFirstAsync<{ parent_practice_id: string | null }>(
+    'SELECT parent_practice_id FROM practices WHERE id = ? AND active = 1',
+    parentPracticeId,
+  );
+  if (!parent) throw new Error('The selected parent practice is no longer available.');
+  if (parent.parent_practice_id) throw new Error('Choose a top-level practice as the parent.');
+}
+
+async function nextParentSortOrder(
+  db: Awaited<ReturnType<typeof getDb>>,
+  practiceId: string,
+  parentPracticeId?: string | null,
+) {
+  if (!parentPracticeId) return 0;
+  const current = await db.getFirstAsync<{ parent_practice_id: string | null; parent_sort_order: number }>(
+    'SELECT parent_practice_id, parent_sort_order FROM practices WHERE id = ?',
+    practiceId,
+  );
+  if (current?.parent_practice_id === parentPracticeId) return current.parent_sort_order;
+  const max = await db.getFirstAsync<{ value: number | null }>(
+    'SELECT MAX(parent_sort_order) as value FROM practices WHERE parent_practice_id = ?',
+    parentPracticeId,
+  );
+  return (max?.value ?? 0) + 10;
 }
 
 async function replacePracticeMetrics(
@@ -1194,7 +1246,7 @@ async function replacePracticeMetrics(
 
   for (const [index, input] of metrics.entries()) {
     const name = input.name.trim();
-    if (!name) throw new Error(index === 0 ? 'Primary metric name is required.' : 'Every sub-practice needs a name.');
+    if (!name) throw new Error(input.isPrimary ? 'Primary metric name is required.' : 'Every sub-practice needs a name.');
     const metricId = input.id && existingIds.has(input.id) ? input.id : makeId('metric');
     const min = input.metricType === 'scale' ? 1 : null;
     const max = input.metricType === 'scale' ? 5 : null;
@@ -1202,21 +1254,23 @@ async function replacePracticeMetrics(
       await db.runAsync(
         `UPDATE metrics
          SET name = ?, metric_type = ?, scale_min = ?, scale_max = ?, required = 0,
-           sort_order = ?, active = 1, updated_at = CURRENT_TIMESTAMP
+           sort_order = ?, domain_id = ?, is_primary = ?, active = 1, updated_at = CURRENT_TIMESTAMP
          WHERE id = ? AND practice_id = ?`,
         name,
         input.metricType,
         min,
         max,
         index,
+        input.domainId || null,
+        input.isPrimary ? 1 : 0,
         metricId,
         practiceId,
       );
     } else {
       await db.runAsync(
         `INSERT INTO metrics
-          (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order, active)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1)`,
+          (id, practice_id, name, metric_type, scale_min, scale_max, required, sort_order, domain_id, is_primary, active)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 1)`,
         metricId,
         practiceId,
         name,
@@ -1224,6 +1278,8 @@ async function replacePracticeMetrics(
         min,
         max,
         index,
+        input.domainId || null,
+        input.isPrimary ? 1 : 0,
       );
     }
     retainedIds.push(metricId);
@@ -1590,17 +1646,15 @@ export async function exportAllData() {
 
 export async function exportReadableData() {
   const db = await getDb();
-  const [domains, blockers, practices, routines, sessions, entries, weeklyReports] = await Promise.all([
+  const [domains, practices, routines, sessions, entries, weeklyReports] = await Promise.all([
     db.getAllAsync<{ name: string; description: string | null; active: number }>(
       'SELECT name, description, active FROM domains ORDER BY sort_order, name',
-    ),
-    db.getAllAsync<{ name: string; description: string | null; active: number }>(
-      'SELECT name, description, active FROM blockers ORDER BY name',
     ),
     db.getAllAsync<{
       name: string;
       description: string | null;
       domain_name: string;
+      parent_name: string | null;
       allow_note: number;
       markable: number;
       weekly_target: number | null;
@@ -1610,14 +1664,22 @@ export async function exportReadableData() {
       `SELECT p.name,
         p.description,
         d.name as domain_name,
+        parent.name as parent_name,
         p.allow_note,
         p.markable,
         p.weekly_target,
         p.active,
-        GROUP_CONCAT(m.name || ' (' || m.metric_type || ')', ', ') as metrics
+        GROUP_CONCAT(
+          m.name || ' (' || m.metric_type ||
+          CASE WHEN m.is_primary = 1 THEN ', primary' ELSE ', sub-practice' END ||
+          CASE WHEN md.name IS NOT NULL THEN ', domain: ' || md.name ELSE '' END || ')',
+          ', '
+        ) as metrics
        FROM practices p
        JOIN domains d ON d.id = p.domain_id
+       LEFT JOIN practices parent ON parent.id = p.parent_practice_id
        LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+       LEFT JOIN domains md ON md.id = m.domain_id
        GROUP BY p.id
        ORDER BY d.sort_order, p.name`,
     ),
@@ -1665,6 +1727,7 @@ export async function exportReadableData() {
     db.getAllAsync<{
       entry_date: string;
       practice_name: string;
+      parent_name: string | null;
       domain_name: string;
       status: string | null;
       note: string | null;
@@ -1673,29 +1736,24 @@ export async function exportReadableData() {
       value_boolean: number | null;
       value_number: number | null;
       value_text: string | null;
-      blockers: string | null;
     }>(
       `SELECT de.entry_date,
         p.name as practice_name,
-        d.name as domain_name,
+        parent.name as parent_name,
+        COALESCE(md.name, d.name) as domain_name,
         de.status,
         de.note,
         m.name as metric_name,
         m.metric_type,
         emv.value_boolean,
         emv.value_number,
-        emv.value_text,
-        (
-          SELECT GROUP_CONCAT(b.name, ', ')
-          FROM entry_blockers eb
-          JOIN blockers b ON b.id = eb.blocker_id
-          WHERE eb.entry_id = de.id
-           AND eb.enabled = 1
-        ) as blockers
+        emv.value_text
        FROM daily_entries de
        JOIN practices p ON p.id = de.practice_id
        JOIN domains d ON d.id = p.domain_id
+       LEFT JOIN practices parent ON parent.id = p.parent_practice_id
        LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+       LEFT JOIN domains md ON md.id = m.domain_id
        LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
        ORDER BY de.entry_date DESC, d.sort_order, p.name, m.sort_order`,
     ),
@@ -1716,9 +1774,6 @@ export async function exportReadableData() {
     '',
     '## Domains',
     ...formatNamedRows(domains),
-    '',
-    '## Blockers',
-    ...formatNamedRows(blockers),
     '',
     '## Practices',
     ...formatPracticeExportRows(practices),
@@ -1752,6 +1807,7 @@ function formatPracticeExportRows(
     name: string;
     description: string | null;
     domain_name: string;
+    parent_name: string | null;
     allow_note: number;
     markable: number;
     weekly_target: number | null;
@@ -1764,6 +1820,7 @@ function formatPracticeExportRows(
     [
       `- ${row.name}`,
       `domain: ${row.domain_name}`,
+      row.parent_name ? `sub-practice of: ${row.parent_name}` : null,
       row.active ? null : 'inactive',
       row.metrics ? `metrics: ${row.metrics}` : null,
       `notes: ${row.allow_note ? 'allowed' : 'off'}`,
@@ -1828,6 +1885,7 @@ function formatReadableEntryRows(
   rows: Array<{
     entry_date: string;
     practice_name: string;
+    parent_name: string | null;
     domain_name: string;
     status: string | null;
     note: string | null;
@@ -1836,7 +1894,6 @@ function formatReadableEntryRows(
     value_boolean: number | null;
     value_number: number | null;
     value_text: string | null;
-    blockers: string | null;
   }>,
 ) {
   if (!rows.length) return ['No practice entries.'];
@@ -1844,12 +1901,12 @@ function formatReadableEntryRows(
     [
       `- ${row.entry_date}`,
       row.practice_name,
+      row.parent_name ? `sub-practice of: ${row.parent_name}` : null,
       `domain: ${row.domain_name}`,
       row.metric_name ? `metric: ${row.metric_name}` : null,
       row.metric_type ? `type: ${row.metric_type}` : null,
       row.status ? `status: ${row.status}` : null,
       formatMetricValue(row),
-      row.blockers ? `blockers: ${row.blockers}` : null,
       row.note ? `note: ${row.note}` : null,
     ]
       .filter(Boolean)
@@ -1908,6 +1965,7 @@ export async function importAllData(exportJson: string) {
   } finally {
     await db.execAsync('PRAGMA foreign_keys = ON;');
   }
+  await ensureMetricPrimaryFlags(db);
   await ensureRoshChodeshRoutine(db);
   await ensureReflectionDefaults(db);
 }

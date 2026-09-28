@@ -38,6 +38,9 @@ export type Metric = {
   required: boolean;
   helpText?: string | null;
   sortOrder: number;
+  domainId?: string | null;
+  domainName?: string | null;
+  isPrimary: boolean;
   options: MetricOption[];
 };
 
@@ -88,6 +91,7 @@ export type NightlyReviewItem = {
     target: number;
     completedBeforeToday: number;
   } | null;
+  subPractices: NightlyReviewItem[];
 };
 
 export type NightlyReviewSection = ReviewSection & {

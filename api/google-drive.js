@@ -415,7 +415,6 @@ function sanitizeDocumentText(value) {
 function buildReadableCloudExport(snapshot) {
   const tables = snapshot?.tables ?? {};
   const domains = rows(tables.domains);
-  const blockers = rows(tables.blockers);
   const practices = rows(tables.practices);
   const metrics = rows(tables.metrics);
   const routines = rows(tables.routine_templates).filter((routine) => !routine.deleted_at);
@@ -425,18 +424,15 @@ function buildReadableCloudExport(snapshot) {
   const sessions = rows(tables.daily_review_sessions);
   const entries = rows(tables.daily_entries);
   const metricValues = rows(tables.entry_metric_values);
-  const entryBlockers = rows(tables.entry_blockers).filter((item) => Number(item.enabled ?? 1) === 1);
   const weeklyReviews = rows(tables.weekly_reviews);
   const weeklyReports = rows(tables.weekly_reports);
 
   const domainById = byId(domains);
-  const blockerById = byId(blockers);
   const practiceById = byId(practices);
   const metricById = byId(metrics);
   const sectionById = byId(sections);
   const routineById = byId(routines);
   const metricValuesByEntry = groupBy(metricValues, 'entry_id');
-  const blockersByEntry = groupBy(entryBlockers, 'entry_id');
   const entriesByDate = groupBy(entries, 'entry_date');
   const schedulesByRoutine = groupBy(schedules, 'routine_template_id');
   const practicesByRoutine = groupBy(routinePractices, 'routine_template_id');
@@ -461,16 +457,6 @@ function buildReadableCloudExport(snapshot) {
     );
   }
 
-  lines.push('', '## Blockers');
-  if (!blockers.length) lines.push('No blockers.');
-  for (const blocker of sortByName(blockers)) {
-    lines.push(
-      [`- ${textValue(blocker.name, 'Unnamed blocker')}`, Number(blocker.active ?? 1) === 1 ? null : 'inactive', blocker.description ? `description: ${blocker.description}` : null]
-        .filter(Boolean)
-        .join('; '),
-    );
-  }
-
   lines.push('', '## Practices');
 
   if (!practices.length) lines.push('No practices.');
@@ -482,9 +468,16 @@ function buildReadableCloudExport(snapshot) {
       [
         `- ${textValue(practice.name, 'Unnamed practice')}`,
         `domain: ${textValue(domainById.get(practice.domain_id)?.name, 'Unknown')}`,
+        practice.parent_practice_id
+          ? `sub-practice of: ${textValue(practiceById.get(practice.parent_practice_id)?.name, 'Unknown practice')}`
+          : null,
         Number(practice.active ?? 1) === 1 ? null : 'inactive',
         practiceMetrics.length
-          ? `metrics: ${practiceMetrics.map((metric) => `${textValue(metric.name, 'Metric')} (${textValue(metric.metric_type, 'unknown')})`).join(', ')}`
+          ? `metrics: ${practiceMetrics.map((metric) => {
+              const role = Number(metric.is_primary ?? 0) === 1 ? 'primary' : 'sub-practice';
+              const metricDomain = metric.domain_id ? `, domain: ${textValue(domainById.get(metric.domain_id)?.name, 'Unknown')}` : '';
+              return `${textValue(metric.name, 'Metric')} (${textValue(metric.metric_type, 'unknown')}, ${role}${metricDomain})`;
+            }).join(', ')}`
           : null,
         practice.weekly_target ? `weekly target: ${practice.weekly_target}` : null,
         practice.description ? `description: ${practice.description}` : null,
@@ -541,15 +534,14 @@ function buildReadableCloudExport(snapshot) {
       const practice = practiceById.get(entry.practice_id);
       const domain = domainById.get(practice?.domain_id);
       const values = metricValuesByEntry.get(entry.id) ?? [];
-      const selectedBlockers = (blockersByEntry.get(entry.id) ?? [])
-        .map((item) => blockerById.get(item.blocker_id)?.name)
-        .filter(Boolean);
       const parts = [
         `- ${textValue(practice?.name, 'Unknown practice')}`,
+        practice?.parent_practice_id
+          ? `sub-practice of: ${textValue(practiceById.get(practice.parent_practice_id)?.name, 'Unknown practice')}`
+          : null,
         domain?.name ? `domain: ${domain.name}` : null,
         entry.status ? `status: ${entry.status}` : null,
-        ...values.map((value) => formatCloudMetricValue(value, metricById.get(value.metric_id))),
-        selectedBlockers.length ? `blockers: ${selectedBlockers.join(', ')}` : null,
+        ...values.map((value) => formatCloudMetricValue(value, metricById.get(value.metric_id), domainById, practice?.domain_id)),
         entry.note ? `note: ${entry.note}` : null,
         Number(entry.remind_tomorrow ?? 0) === 1 ? 'marked for tomorrow' : null,
       ].filter(Boolean);
@@ -585,13 +577,16 @@ function buildReadableCloudExport(snapshot) {
   return lines.join('\n');
 }
 
-function formatCloudMetricValue(value, metric) {
+function formatCloudMetricValue(value, metric, domainById, practiceDomainId) {
   const name = textValue(metric?.name, 'Metric');
-  if (value.value_boolean != null) return `${name}: ${Number(value.value_boolean) ? 'yes' : 'no'}`;
-  if (value.value_number != null) return `${name}: ${value.value_number}`;
-  if (value.value_text) return `${name}: ${value.value_text}`;
-  if (value.value_json) return `${name}: ${value.value_json}`;
-  return `${name}: no response`;
+  const metricDomain = metric?.domain_id && metric.domain_id !== practiceDomainId
+    ? ` [${textValue(domainById?.get(metric.domain_id)?.name, 'Unknown domain')}]`
+    : '';
+  if (value.value_boolean != null) return `${name}${metricDomain}: ${Number(value.value_boolean) ? 'yes' : 'no'}`;
+  if (value.value_number != null) return `${name}${metricDomain}: ${value.value_number}`;
+  if (value.value_text) return `${name}${metricDomain}: ${value.value_text}`;
+  if (value.value_json) return `${name}${metricDomain}: ${value.value_json}`;
+  return `${name}${metricDomain}: no response`;
 }
 
 function appendOptionalLine(lines, label, value) {
@@ -683,4 +678,3 @@ function httpError(statusCode, message) {
 }
 
 module.exports._test = { buildReadableCloudExport, sanitizeDocumentText };
-

@@ -12,6 +12,7 @@ type MetricRow = {
   metric_name: string | null;
   metric_type: MetricType | null;
   sort_order: number | null;
+  is_primary: number | null;
 };
 
 type ScoreValue = {
@@ -57,15 +58,17 @@ export async function getTrendSummary(): Promise<TrendSummary> {
     `SELECT
       p.id as practice_id,
       p.name as practice_name,
-      d.id as domain_id,
-      d.name as domain_name,
+      COALESCE(md.id, d.id) as domain_id,
+      COALESCE(md.name, d.name) as domain_name,
       m.id as metric_id,
       m.name as metric_name,
       m.metric_type,
-      m.sort_order
+      m.sort_order,
+      m.is_primary
      FROM practices p
      JOIN domains d ON d.id = p.domain_id
      LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+     LEFT JOIN domains md ON md.id = m.domain_id AND md.active = 1
      WHERE p.active = 1
       AND d.active = 1
       AND EXISTS (
@@ -78,40 +81,17 @@ export async function getTrendSummary(): Promise<TrendSummary> {
   );
 
   const practices = groupPractices(metricRows);
-  const [scores7, scores30, commonBlockers] = await Promise.all([
+  const [scores7, scores30] = await Promise.all([
     getPracticeScores(weekWindow.start, weekWindow.end),
     getPracticeScores(start30),
-    db.getAllAsync<{
-      blocker_id: string;
-      blocker_name: string;
-      count: number;
-    }>(
-      `SELECT b.id as blocker_id, b.name as blocker_name, COUNT(*) as count
-       FROM entry_blockers eb
-       JOIN blockers b ON b.id = eb.blocker_id
-       JOIN daily_entries de ON de.id = eb.entry_id
-       JOIN practices p ON p.id = de.practice_id
-       WHERE de.entry_date >= ?
-        AND eb.enabled = 1
-        AND EXISTS (
-          SELECT 1
-          FROM routine_practices rp
-          WHERE rp.practice_id = p.id
-           AND rp.archived_from IS NULL
-        )
-       GROUP BY b.id, b.name
-       ORDER BY count DESC, b.name
-       LIMIT 8`,
-      start30,
-    ),
   ]);
 
   const domainInsights = buildDomainInsights(scores7, scores30);
   const practiceTrends = [];
   for (const practice of practices) {
     const sortedMetrics = [...practice.metrics].sort((a, b) => a.sortOrder - b.sortOrder);
-    for (const [metricIndex, metric] of sortedMetrics.entries()) {
-      const trend = await buildMetricTrend(practice, metric, metricIndex > 0, weekWindow);
+    for (const metric of sortedMetrics) {
+      const trend = await buildMetricTrend(practice, metric, !metric.isPrimary, weekWindow);
       if (trend) practiceTrends.push(trend);
     }
   }
@@ -121,11 +101,7 @@ export async function getTrendSummary(): Promise<TrendSummary> {
     weekLabel: weekWindow.label,
     domainInsights,
     practiceTrends,
-    commonBlockers: commonBlockers.map((row) => ({
-      blockerId: row.blocker_id,
-      blockerName: row.blocker_name,
-      count: row.count,
-    })),
+    commonBlockers: [],
   };
 }
 
@@ -272,7 +248,15 @@ function groupPractices(rows: MetricRow[]) {
     practiceName: string;
     domainId: string;
     domainName: string;
-    metrics: Array<{ id: string; name: string; type: MetricType; sortOrder: number }>;
+    metrics: Array<{
+      id: string;
+      name: string;
+      type: MetricType;
+      sortOrder: number;
+      domainId: string;
+      domainName: string;
+      isPrimary: boolean;
+    }>;
   }>();
   for (const row of rows) {
     const practice = map.get(row.practice_id) ?? {
@@ -288,6 +272,9 @@ function groupPractices(rows: MetricRow[]) {
         name: row.metric_name,
         type: row.metric_type,
         sortOrder: row.sort_order ?? 0,
+        domainId: row.domain_id,
+        domainName: row.domain_name,
+        isPrimary: row.is_primary === 1,
       });
     }
     map.set(row.practice_id, practice);
@@ -312,20 +299,23 @@ async function getPracticeScores(startDate: string, endDate?: string): Promise<S
     value_boolean: number | null;
     value_number: number | null;
     status: string | null;
+    is_primary: number | null;
   }>(
     `SELECT
       p.id as practice_id,
       p.name as practice_name,
-      d.id as domain_id,
-      d.name as domain_name,
+      COALESCE(md.id, d.id) as domain_id,
+      COALESCE(md.name, d.name) as domain_name,
       m.metric_type,
       emv.value_boolean,
       emv.value_number,
-      de.status
+      de.status,
+      m.is_primary
      FROM daily_entries de
      JOIN practices p ON p.id = de.practice_id
      JOIN domains d ON d.id = p.domain_id
      LEFT JOIN metrics m ON m.practice_id = p.id AND m.active = 1
+     LEFT JOIN domains md ON md.id = m.domain_id AND md.active = 1
      LEFT JOIN entry_metric_values emv ON emv.entry_id = de.id AND emv.metric_id = m.id
      WHERE ${dateFilters.join(' AND ')}
       AND p.active = 1
@@ -350,7 +340,8 @@ async function getPracticeScores(startDate: string, endDate?: string): Promise<S
   }>();
 
   for (const row of rows) {
-    const item = byPractice.get(row.practice_id) ?? {
+    const scoreKey = `${row.practice_id}:${row.domain_id}`;
+    const item = byPractice.get(scoreKey) ?? {
       practiceId: row.practice_id,
       practiceName: row.practice_name,
       domainId: row.domain_id,
@@ -361,10 +352,10 @@ async function getPracticeScores(startDate: string, endDate?: string): Promise<S
     };
     if (row.metric_type === 'scale' && row.value_number != null) item.qualityValues.push(row.value_number);
     if (row.metric_type === 'boolean' && row.value_boolean != null) item.booleanValues.push(row.value_boolean);
-    if (row.status === 'done' || row.status === 'missed' || row.status === 'partial') {
+    if ((row.metric_type == null || row.is_primary === 1) && (row.status === 'done' || row.status === 'missed' || row.status === 'partial')) {
       item.statusValues.push(row.status === 'done' ? 1 : row.status === 'partial' ? 0.5 : 0);
     }
-    byPractice.set(row.practice_id, item);
+    byPractice.set(scoreKey, item);
   }
 
   return [...byPractice.values()]
@@ -417,8 +408,8 @@ async function buildMetricTrend(
       practiceId: practice.practiceId,
       metricId: metric.id,
       practiceName: practice.practiceName,
-      domainId: practice.domainId,
-      domainName: practice.domainName,
+      domainId: metric.domainId,
+      domainName: metric.domainName,
       metricName: metric.name,
       isSubPractice,
       metricKind: 'choice',
@@ -437,8 +428,8 @@ async function buildMetricTrend(
       practiceId: practice.practiceId,
       metricId: metric.id,
       practiceName: practice.practiceName,
-      domainId: practice.domainId,
-      domainName: practice.domainName,
+      domainId: metric.domainId,
+      domainName: metric.domainName,
       metricName: metric.name,
       isSubPractice,
       metricKind: 'text',
@@ -457,8 +448,8 @@ async function buildMetricTrend(
       practiceId: practice.practiceId,
       metricId: metric.id,
       practiceName: practice.practiceName,
-      domainId: practice.domainId,
-      domainName: practice.domainName,
+      domainId: metric.domainId,
+      domainName: metric.domainName,
       metricName: metric.name,
       isSubPractice,
       metricKind: 'complete',
@@ -476,8 +467,8 @@ async function buildMetricTrend(
     practiceId: practice.practiceId,
     metricId: metric.id,
     practiceName: practice.practiceName,
-    domainId: practice.domainId,
-    domainName: practice.domainName,
+    domainId: metric.domainId,
+    domainName: metric.domainName,
     metricName: metric.name,
     isSubPractice,
     metricKind: metric.type === 'number' ? 'number' : 'quality',

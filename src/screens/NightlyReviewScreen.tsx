@@ -5,8 +5,8 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 
 import { ReviewSection } from '@/src/components/ReviewSection';
 import { colors, spacing } from '@/src/components/ui';
-import type { Blocker, EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
-import { getActiveBlockers, getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
+import type { EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
+import { getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getNightlyReviewItems } from '@/src/services/activeRoutineService';
 import { addDaysIso, dayName, dayOfMonth, monthDay, normalizeReviewDate, shortDayName, todayIsoDate } from '@/src/utils/dates';
@@ -19,7 +19,6 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const [reviewDate, setReviewDate] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [dateInput, setDateInput] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [sections, setSections] = useState<NightlyReviewSection[]>([]);
-  const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -41,13 +40,11 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const range = getCalendarRange(reviewDate, calendarMode);
-    const [reviewSections, activeBlockers, savedDraft] = await Promise.all([
+    const [reviewSections, savedDraft] = await Promise.all([
       getNightlyReviewItems(reviewDate),
-      getActiveBlockers(),
       getReviewDraft(reviewDate),
     ]);
     setSections(reviewSections);
-    setBlockers(activeBlockers);
     setDraft(savedDraft);
     setLoading(false);
     const [nextSavedDates, nextStreak] = await Promise.all([
@@ -231,7 +228,6 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
           ) : (
             sections.map((section) => (
               <ReviewSection
-                blockers={blockers}
                 entries={draft.entries}
                 key={section.id}
                 onEntryChange={updateEntry}

@@ -32,6 +32,8 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'daily_review_sessions', 'completed_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
+  await ensureColumn(db, 'metrics', 'domain_id', 'TEXT');
+  await ensureColumn(db, 'metrics', 'is_primary', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'metric_options', 'created_at', 'TEXT');
   await ensureColumn(db, 'metric_options', 'updated_at', 'TEXT');
   await ensureColumn(db, 'routine_practices', 'archived_from', 'TEXT');
@@ -39,6 +41,8 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'practices', 'allow_note', 'INTEGER NOT NULL DEFAULT 1');
   await ensureColumn(db, 'practices', 'markable', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'practices', 'weekly_target', 'INTEGER');
+  await ensureColumn(db, 'practices', 'parent_practice_id', 'TEXT');
+  await ensureColumn(db, 'practices', 'parent_sort_order', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'daily_entries', 'remind_tomorrow', 'INTEGER NOT NULL DEFAULT 0');
   await ensureColumn(db, 'entry_blockers', 'enabled', 'INTEGER NOT NULL DEFAULT 1');
   await ensureColumn(db, 'entry_blockers', 'updated_at', 'TEXT');
@@ -46,9 +50,41 @@ export async function initializeDatabase() {
   if (!existing?.count) {
     await seedDatabase(db);
   }
+  await ensureMetricPrimaryFlags(db);
   await ensureRoshChodeshRoutine(db);
   await ensureReflectionDefaults(db);
   await normalizeQualityScale(db);
+}
+
+export async function ensureMetricPrimaryFlags(db: SQLite.SQLiteDatabase) {
+  const migrationKey = 'metric_primary_flags_v1';
+  const migrated = await db.getFirstAsync<{ value: string }>('SELECT value FROM app_preferences WHERE key = ?', migrationKey);
+  if (migrated) return;
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE metrics
+       SET is_primary = 1
+       WHERE active = 1
+        AND id IN (
+          SELECT m.id
+          FROM metrics m
+          WHERE m.active = 1
+           AND m.id = (
+             SELECT candidate.id
+             FROM metrics candidate
+             WHERE candidate.practice_id = m.practice_id AND candidate.active = 1
+             ORDER BY candidate.sort_order, candidate.id
+             LIMIT 1
+           )
+        )`,
+    );
+    await db.runAsync(
+      `INSERT INTO app_preferences (key, value, updated_at)
+       VALUES (?, '1', CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = CURRENT_TIMESTAMP`,
+      migrationKey,
+    );
+  });
 }
 
 async function ensureColumn(db: SQLite.SQLiteDatabase, tableName: string, columnName: string, definition: string) {
@@ -119,8 +155,8 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
       for (const [index, metric] of practice.metrics.entries()) {
         await db.runAsync(
           `INSERT OR IGNORE INTO metrics
-            (id, practice_id, name, metric_type, scale_min, scale_max, required, help_text, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, practice_id, name, metric_type, scale_min, scale_max, required, help_text, sort_order, is_primary)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           metric.id,
           practice.id,
           metric.name,
@@ -130,6 +166,7 @@ async function seedDatabase(db: SQLite.SQLiteDatabase) {
           metric.required ? 1 : 0,
           metric.helpText ?? null,
           index + 1,
+          index === 0 ? 1 : 0,
         );
 
         for (const [optionIndex, [value, label, optionValue]] of (metric.options ?? []).entries()) {

@@ -87,3 +87,42 @@ test('keeps a newer removed sub-practice choice inactive', () => {
   const merged = mergeCloudSnapshots(local, cloud);
   assert.equal(merged.tables.metric_options[0].active, 0);
 });
+
+test('keeps a practice identity and history when it is moved under a parent', () => {
+  const cloud = snapshot({
+    practices: [{
+      id: 'practice-modeh-ani',
+      name: 'Modeh Ani',
+      parent_practice_id: null,
+      updated_at: '2026-09-28T01:00:00.000Z',
+    }],
+    daily_entries: [{
+      id: 'entry-before-move',
+      user_id: 'local',
+      practice_id: 'practice-modeh-ani',
+      entry_date: '2026-09-27',
+      updated_at: '2026-09-28T01:00:00.000Z',
+    }],
+  });
+  const local = snapshot({
+    practices: [{
+      id: 'practice-modeh-ani',
+      name: 'Modeh Ani',
+      parent_practice_id: 'practice-wake-lion',
+      parent_sort_order: 30,
+      updated_at: '2026-09-28T02:00:00.000Z',
+    }],
+    daily_entries: [{
+      id: 'entry-before-move',
+      user_id: 'local',
+      practice_id: 'practice-modeh-ani',
+      entry_date: '2026-09-27',
+      updated_at: '2026-09-28T01:00:00.000Z',
+    }],
+  });
+
+  const merged = mergeCloudSnapshots(local, cloud);
+  assert.equal(merged.tables.practices[0].id, 'practice-modeh-ani');
+  assert.equal(merged.tables.practices[0].parent_practice_id, 'practice-wake-lion');
+  assert.equal(merged.tables.daily_entries[0].practice_id, 'practice-modeh-ani');
+});

@@ -2,6 +2,7 @@ import { getDb } from '@/src/db/client';
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import type { NightlyReviewItem, NightlyReviewSection, RoutineTemplate } from '@/src/models/types';
 import { getMetricsForPracticeIds, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
+import { isDiasporaYomTovDate } from '@/src/services/jewishCalendarService';
 import { addDaysIso, dayOfWeek } from '@/src/utils/dates';
 
 type RoutineRow = {
@@ -47,6 +48,7 @@ type ReviewItemRow = {
   section_sort_order: number;
   sort_order: number;
   required: number;
+  parent_practice_id?: string | null;
 };
 
 type AvodahContextRow = {
@@ -63,6 +65,7 @@ export async function getActiveRoutinesForDate(reviewDate: string): Promise<Rout
   ]);
 
   const weekday = dayOfWeek(reviewDate);
+  const usesShabbosRoutine = weekday === 6 || await isDiasporaYomTovDate(reviewDate);
   const exceptionsByRoutine = new Map(exceptionRows.map((exception) => [exception.routine_template_id, exception.action]));
 
   const active = routineRows.filter((routine) => {
@@ -70,6 +73,7 @@ export async function getActiveRoutinesForDate(reviewDate: string): Promise<Rout
     if (exception === 'enable') return true;
     if (exception === 'disable') return false;
     if (routine.id === 'routine_rosh_chodesh' && isFirstRoshChodeshDate(reviewDate)) return true;
+    if (routine.id === 'routine_shabbos' && usesShabbosRoutine) return true;
     return scheduleRows
       .filter((schedule) => schedule.routine_template_id === routine.id)
       .some((schedule) => {
@@ -129,6 +133,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
     WHERE rp.enabled = 1
       AND (rp.archived_from IS NULL OR rp.archived_from > ?)
       AND p.active = 1
+      AND p.parent_practice_id IS NULL
       AND rs.active = 1
       AND rp.routine_template_id IN (${activeRoutineIds.map(() => '?').join(',')})
     ORDER BY rs.sort_order, rp.sort_order`,
@@ -144,31 +149,87 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
   }
 
   const winners = [...winningItems.values()];
-  const metricsByPractice = await getMetricsForPracticeIds(winners.map((item) => item.practice_id));
-  const avodahContextByReviewPractice = await getAvodahReviewContext(reviewDate, winners.map((item) => item.practice_id));
-  const weeklyGoalProgress = await getWeeklyGoalProgress(
-    reviewDate,
-    winners.filter((item) => item.weekly_target != null && item.weekly_target > 0).map((item) => item.practice_id),
-  );
-  const blockerRows = winners.length
-    ? await db.getAllAsync<{ practice_id: string; blocker_id: string; enabled: number }>(
-        `SELECT practice_id, blocker_id, enabled
-         FROM practice_blockers
-         WHERE practice_id IN (${winners.map(() => '?').join(',')})`,
-        winners.map((item) => item.practice_id),
+  const childRows = winners.length
+    ? await db.getAllAsync<ReviewItemRow>(
+        `SELECT
+          rp.id as routine_practice_id,
+          rt.id as routine_id,
+          rt.name as routine_name,
+          rt.priority as routine_priority,
+          child.id as practice_id,
+          child.name as practice_name,
+          child.description as practice_description,
+          child.allow_note,
+          child.markable,
+          child.weekly_target,
+          NULL as display_name_override,
+          NULL as help_text_override,
+          d.id as domain_id,
+          d.name as domain_name,
+          rs.id as review_section_id,
+          rs.name as review_section_name,
+          rs.description as review_section_description,
+          rs.sort_order as section_sort_order,
+          child.parent_sort_order as sort_order,
+          0 as required,
+          child.parent_practice_id
+         FROM practices child
+         JOIN domains d ON d.id = child.domain_id
+         JOIN routine_practices rp ON rp.practice_id = child.parent_practice_id
+         JOIN routine_templates rt ON rt.id = rp.routine_template_id
+         JOIN review_sections rs ON rs.id = rp.review_section_id
+         WHERE child.active = 1
+          AND rp.id IN (${winners.map(() => '?').join(',')})
+         ORDER BY child.parent_sort_order, child.name`,
+        winners.map((item) => item.routine_practice_id),
       )
     : [];
-  const blockersByPractice = new Map<string, string[]>();
-  const customizedBlockerPractices = new Set<string>();
-  for (const row of blockerRows) {
-    customizedBlockerPractices.add(row.practice_id);
-    if (row.enabled === 1) {
-      const list = blockersByPractice.get(row.practice_id) ?? [];
-      list.push(row.blocker_id);
-      blockersByPractice.set(row.practice_id, list);
-    }
-  }
+  const allReviewRows = [...winners, ...childRows];
+  const allPracticeIds = allReviewRows.map((item) => item.practice_id);
+  const metricsByPractice = await getMetricsForPracticeIds(allPracticeIds);
+  const avodahContextByReviewPractice = await getAvodahReviewContext(reviewDate, allPracticeIds);
+  const weeklyGoalProgress = await getWeeklyGoalProgress(
+    reviewDate,
+    allReviewRows.filter((item) => item.weekly_target != null && item.weekly_target > 0).map((item) => item.practice_id),
+  );
   const sectionMap = new Map<string, NightlyReviewSection>();
+
+  const buildItem = (row: ReviewItemRow): NightlyReviewItem => ({
+    routinePracticeId: row.routine_practice_id,
+    routineId: row.routine_id,
+    routineName: row.routine_name,
+    routinePriority: row.routine_priority,
+    practiceId: row.practice_id,
+    practiceName: row.practice_name,
+    displayName: row.display_name_override ?? row.practice_name,
+    helpText: appendHelpText(row.help_text_override ?? row.practice_description, avodahContextByReviewPractice.get(row.practice_id)),
+    domainId: row.domain_id,
+    domainName: row.domain_name,
+    reviewSectionId: row.review_section_id,
+    reviewSectionName: row.review_section_name,
+    sectionSortOrder: row.section_sort_order,
+    sortOrder: row.sort_order,
+    required: row.required === 1,
+    metrics: metricsByPractice.get(row.practice_id) ?? [],
+    allowNote: row.allow_note === 1,
+    markable: reminderPreferences.taskRemindersEnabled && row.markable === 1,
+    weeklyGoal:
+      row.weekly_target != null && row.weekly_target > 0 && (metricsByPractice.get(row.practice_id) ?? []).some((metric) => metric.metricType === 'boolean')
+        ? {
+            target: row.weekly_target,
+            completedBeforeToday: weeklyGoalProgress.get(row.practice_id) ?? 0,
+          }
+        : null,
+    subPractices: [],
+  });
+
+  const childrenByParent = new Map<string, NightlyReviewItem[]>();
+  for (const row of childRows) {
+    if (!row.parent_practice_id) continue;
+    const children = childrenByParent.get(row.parent_practice_id) ?? [];
+    children.push(buildItem(row));
+    childrenByParent.set(row.parent_practice_id, children);
+  }
 
   for (const row of winners.sort((a, b) => a.section_sort_order - b.section_sort_order || a.sort_order - b.sort_order)) {
     const section = sectionMap.get(row.review_section_id) ?? {
@@ -178,34 +239,8 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
       sortOrder: row.section_sort_order,
       items: [],
     };
-    const item: NightlyReviewItem = {
-      routinePracticeId: row.routine_practice_id,
-      routineId: row.routine_id,
-      routineName: row.routine_name,
-      routinePriority: row.routine_priority,
-      practiceId: row.practice_id,
-      practiceName: row.practice_name,
-      displayName: row.display_name_override ?? row.practice_name,
-      helpText: appendHelpText(row.help_text_override ?? row.practice_description, avodahContextByReviewPractice.get(row.practice_id)),
-      domainId: row.domain_id,
-      domainName: row.domain_name,
-      reviewSectionId: row.review_section_id,
-      reviewSectionName: row.review_section_name,
-      sectionSortOrder: row.section_sort_order,
-      sortOrder: row.sort_order,
-      required: row.required === 1,
-      metrics: metricsByPractice.get(row.practice_id) ?? [],
-      allowedBlockerIds: customizedBlockerPractices.has(row.practice_id) ? blockersByPractice.get(row.practice_id) ?? [] : null,
-      allowNote: row.allow_note === 1,
-      markable: reminderPreferences.taskRemindersEnabled && row.markable === 1,
-      weeklyGoal:
-        row.weekly_target != null && row.weekly_target > 0 && (metricsByPractice.get(row.practice_id) ?? []).some((metric) => metric.metricType === 'boolean')
-          ? {
-              target: row.weekly_target,
-              completedBeforeToday: weeklyGoalProgress.get(row.practice_id) ?? 0,
-            }
-          : null,
-    };
+    const item = buildItem(row);
+    item.subPractices = childrenByParent.get(row.practice_id) ?? [];
     section.items.push(item);
     sectionMap.set(row.review_section_id, section);
   }

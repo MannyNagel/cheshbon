@@ -216,20 +216,6 @@ export default function TrendsScreen() {
         )}
       </Section>
 
-      <Section title="Common Blockers">
-        {summary.commonBlockers.length ? (
-          <View style={styles.blockerWrap}>
-            {summary.commonBlockers.map((blocker) => (
-              <View key={blocker.blockerId} style={styles.blockerPill}>
-                <Text style={styles.blockerName}>{blocker.blockerName}</Text>
-                <Text style={styles.blockerCount}>{blocker.count}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <Empty text="Blockers will show up once selected in reviews." />
-        )}
-      </Section>
     </ScrollView>
   );
 }
@@ -292,32 +278,6 @@ function kindLabel(kind: TrendSummary['practiceTrends'][number]['metricKind']) {
 }
 
 const styles = StyleSheet.create({
-  blockerCount: {
-    color: colors.blue,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  blockerName: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  blockerPill: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-  },
-  blockerWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
   center: {
     alignItems: 'center',
     backgroundColor: colors.paper,
