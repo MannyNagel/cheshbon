@@ -13,6 +13,16 @@ module.exports = async function handler(request, response) {
   try {
     if (action === 'callback') return handleCallback(request, response);
 
+    // Configuration names are safe to expose and make deployment setup issues
+    // diagnosable without revealing any secret values.
+    if (action === 'status' && request.method === 'GET' && !isConfigured()) {
+      return response.status(200).json({
+        configured: false,
+        connected: false,
+        missingConfiguration: missingConfiguration(),
+      });
+    }
+
     const user = await getSupabaseUser(request.headers.authorization);
     if (action === 'status' && request.method === 'GET') return handleStatus(user, response);
     if (action === 'auth-url' && request.method === 'GET') return handleAuthUrl(user, response);
@@ -589,14 +599,18 @@ function requireConfiguration() {
 }
 
 function isConfigured() {
-  return Boolean(
-    process.env.GOOGLE_DRIVE_CLIENT_ID &&
-      process.env.GOOGLE_DRIVE_CLIENT_SECRET &&
-      process.env.GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY &&
-      process.env.SUPABASE_SERVICE_ROLE_KEY &&
-      process.env.EXPO_PUBLIC_SUPABASE_URL &&
-      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-  );
+  return missingConfiguration().length === 0;
+}
+
+function missingConfiguration() {
+  return [
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'EXPO_PUBLIC_SUPABASE_URL',
+    'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+  ].filter((name) => !process.env[name]);
 }
 
 function callbackUrl() {
