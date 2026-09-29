@@ -1,5 +1,5 @@
 import { ArrowLeft, CalendarDays, Search, X } from 'lucide-react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,7 +9,12 @@ import { monthDay } from '@/src/utils/dates';
 
 export default function JournalArchiveScreen() {
   const params = useLocalSearchParams<{ kind?: string }>();
-  const kind: JournalKind = params.kind === 'thoughts' ? 'thoughts' : 'gratitude';
+  if (params.kind !== 'gratitude') return <Redirect href="/reflections" />;
+  return <GratitudeArchiveScreen />;
+}
+
+function GratitudeArchiveScreen() {
+  const kind: JournalKind = 'gratitude';
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [dateInput, setDateInput] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -34,7 +39,7 @@ export default function JournalArchiveScreen() {
     }, [load]),
   );
 
-  const title = kind === 'gratitude' ? 'Gratitude Journal' : 'Thought Journal';
+  const title = 'Gratitude Journal';
   const emptyText = selectedDate ? 'No entries found for that day.' : 'No journal entries yet.';
 
   return (

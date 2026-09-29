@@ -118,6 +118,41 @@ export default function HomeScreen() {
         <Text style={styles.hebrewDate}>{formatEnglishDate(today)} | {formatHebrewDate(today)}</Text>
       </View>
 
+      <View style={styles.primaryPanel}>
+        <View style={styles.primaryText}>
+          <Text style={styles.panelTitle}>
+            {reviewComplete
+              ? 'Review Complete'
+              : primaryReviewIsYesterday
+                ? "Complete yesterday's review"
+                : 'Nightly Review'}
+          </Text>
+          <Text style={styles.panelCopy}>
+            {reviewComplete
+              ? `Your Daily Cheshbon is complete for ${primaryReviewIsYesterday ? 'yesterday' : 'today'}. You can still edit it if something important comes back to mind.`
+              : reviewStarted
+                ? 'Progress is saved. Continue when you are ready, then mark it complete.'
+                : 'Reviewing your day cultivates real time awareness and helps you stay mindful.'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => openReview(primaryReviewDate)}
+          style={[styles.reviewButton, reviewComplete && styles.editReviewButton]}
+        >
+          <NotebookPen color="#FFFFFF" size={18} />
+          <Text style={styles.reviewButtonText}>
+            {reviewComplete
+              ? 'Edit review'
+              : reviewStarted
+                ? 'Continue review'
+                : primaryReviewIsYesterday
+                  ? "Complete yesterday's review"
+                  : 'Start nightly review'}
+          </Text>
+        </Pressable>
+      </View>
+
       <View style={styles.avodahSection}>
         <View style={styles.sectionTitleRow}>
           <View style={styles.sectionTitleText}>
@@ -153,41 +188,6 @@ export default function HomeScreen() {
         <Text style={styles.foundationEyebrow}>Foundations</Text>
         <Text style={styles.foundationTitle}>How you are living</Text>
         <View style={styles.domainRow}>{foundationDomains.map((domain) => <View key={domain} style={styles.domainChip}><Text style={styles.domainChipText}>{domain}</Text></View>)}</View>
-      </View>
-
-      <View style={styles.primaryPanel}>
-        <View style={styles.primaryText}>
-          <Text style={styles.panelTitle}>
-            {reviewComplete
-              ? 'Review Complete'
-              : primaryReviewIsYesterday
-                ? "Complete yesterday's review"
-                : 'Nightly Review'}
-          </Text>
-          <Text style={styles.panelCopy}>
-            {reviewComplete
-              ? `Your Daily Cheshbon is complete for ${primaryReviewIsYesterday ? 'yesterday' : 'today'}. You can still edit it if something important comes back to mind.`
-              : reviewStarted
-                ? 'Progress is saved. Continue when you are ready, then mark it complete.'
-                : 'Reviewing your day cultivates real time awareness and helps you stay mindful.'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => openReview(primaryReviewDate)}
-          style={[styles.reviewButton, reviewComplete && styles.editReviewButton]}
-        >
-          <NotebookPen color="#FFFFFF" size={18} />
-          <Text style={styles.reviewButtonText}>
-            {reviewComplete
-              ? 'Edit review'
-              : reviewStarted
-                ? 'Continue review'
-                : primaryReviewIsYesterday
-                  ? "Complete yesterday's review"
-                  : 'Start nightly review'}
-          </Text>
-        </Pressable>
       </View>
 
       <View style={styles.statBox}>
@@ -272,13 +272,15 @@ export default function HomeScreen() {
       <View style={styles.section}>
         <View style={styles.sectionTitleRow}>
           <View style={styles.sectionTitleText}>
-            <Text style={styles.sectionTitle}>Thought Journal</Text>
+            <Text style={styles.sectionTitle}>Reflections</Text>
           </View>
-          <JournalButton kind="thoughts" label="See all" />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/reflections')} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>See all</Text>
+          </Pressable>
         </View>
-        {summary.thoughtJournal.length ? (
+        {summary.reflectionJournal.length ? (
           <View style={styles.journalList}>
-            {summary.thoughtJournal.map((item) => (
+            {summary.reflectionJournal.map((item) => (
               <View key={`${item.date}-${item.practiceName}-${item.text}`} style={styles.journalItem}>
                 <View style={styles.journalHeader}>
                   <Text style={styles.gratitudeDate}>{monthDay(item.date)}</Text>
@@ -289,7 +291,7 @@ export default function HomeScreen() {
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyText}>No previous thoughts yet.</Text>
+          <Text style={styles.emptyText}>No previous reflections yet.</Text>
         )}
       </View>
 
@@ -309,7 +311,7 @@ function isBeforeNoon() {
   return new Date().getHours() < 12;
 }
 
-function JournalButton({ kind, label }: { kind: 'gratitude' | 'thoughts'; label: string }) {
+function JournalButton({ kind, label }: { kind: 'gratitude'; label: string }) {
   return (
     <Pressable
       accessibilityRole="button"

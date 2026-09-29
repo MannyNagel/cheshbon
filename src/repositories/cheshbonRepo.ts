@@ -97,10 +97,10 @@ export type HomeSummary = {
     markedPractices: string[];
   };
   recentGratitude: Array<{ date: string; text: string }>;
-  thoughtJournal: Array<{ date: string; practiceName: string; text: string }>;
+  reflectionJournal: Array<{ date: string; practiceName: string; text: string }>;
 };
 
-export type JournalKind = 'gratitude' | 'thoughts';
+export type JournalKind = 'gratitude' | 'reflections';
 export type JournalEntry = { date: string; practiceName: string; text: string };
 
 const homeFunctionPracticeIds = new Set([
@@ -295,7 +295,7 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     LOCAL_USER_ID,
   );
   const recentGratitude = await getJournalEntries('gratitude', { startDate: sevenDaysAgo, endDate: reviewDate, limit: 5 });
-  const thoughtJournal = await getJournalEntries('thoughts', { startDate: sevenDaysAgo, endDate: reviewDate, limit: 5 });
+  const reflectionJournal = await getJournalEntries('reflections', { startDate: sevenDaysAgo, endDate: reviewDate, limit: 5 });
 
   return {
     reviewStarted: Boolean(session),
@@ -305,7 +305,7 @@ export async function getHomeSummary(reviewDate = todayIsoDate()): Promise<HomeS
     currentAvodah: await getCurrentAvodahSummary(db, reviewDate),
     morningReminder: await getMorningReminderSummary(db, reviewDate),
     recentGratitude: recentGratitude.map((entry) => ({ date: entry.date, text: entry.text })),
-    thoughtJournal,
+    reflectionJournal,
   };
 }
 
