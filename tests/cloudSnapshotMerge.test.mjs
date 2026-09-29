@@ -126,3 +126,36 @@ test('keeps a practice identity and history when it is moved under a parent', ()
   assert.equal(merged.tables.practices[0].parent_practice_id, 'practice-wake-lion');
   assert.equal(merged.tables.daily_entries[0].practice_id, 'practice-modeh-ani');
 });
+
+test('keeps a reset and its newer nightly outcome during cloud merge', () => {
+  const cloud = snapshot({
+    reset_events: [{
+      id: 'reset-1',
+      user_id: 'local',
+      reset_date: '2026-09-28',
+      initiated_at: '2026-09-28T18:07:00.000Z',
+      trigger: 'Unstructured time',
+      what_matters_next: 'Learning',
+      outcome: null,
+      updated_at: '2026-09-28T18:07:00.000Z',
+    }],
+  });
+  const local = snapshot({
+    reset_events: [{
+      id: 'reset-1',
+      user_id: 'local',
+      reset_date: '2026-09-28',
+      initiated_at: '2026-09-28T18:07:00.000Z',
+      trigger: 'Unstructured time',
+      what_matters_next: 'Learning',
+      outcome: 'worked',
+      reviewed_at: '2026-09-29T01:00:00.000Z',
+      updated_at: '2026-09-29T01:00:00.000Z',
+    }],
+  });
+
+  const merged = mergeCloudSnapshots(local, cloud);
+  assert.equal(merged.tables.reset_events.length, 1);
+  assert.equal(merged.tables.reset_events[0].outcome, 'worked');
+  assert.equal(merged.tables.reset_events[0].reviewed_at, '2026-09-29T01:00:00.000Z');
+});

@@ -16,6 +16,15 @@ test('formats a cloud snapshot as an analysis-ready review history', () => {
       ],
       metrics: [{ id: 'metric_1', practice_id: 'practice_1', domain_id: 'domain_2', is_primary: 1, name: 'Completed', metric_type: 'boolean', active: 1 }],
       daily_review_sessions: [{ id: 'session_1', review_date: '2026-09-27', completed_at: '2026-09-28T10:00:00Z' }],
+      reset_events: [{
+        id: 'reset_1',
+        reset_date: '2026-09-27',
+        initiated_at: '2026-09-27T18:07:00.000Z',
+        trigger: 'Unstructured time',
+        what_matters_next: 'Learning',
+        first_action: 'Open Gemara',
+        outcome: 'worked',
+      }],
       daily_entries: [{ id: 'entry_1', practice_id: 'practice_1', entry_date: '2026-09-27', note: 'Morning walk' }],
       entry_metric_values: [{ entry_id: 'entry_1', metric_id: 'metric_1', value_boolean: 1 }],
     },
@@ -26,7 +35,27 @@ test('formats a cloud snapshot as an analysis-ready review history', () => {
   assert.match(markdown, /Exercise; sub-practice of: Morning start; domain: Health; Completed \[Middos\]: yes; note: Morning walk/);
   assert.match(markdown, /sub-practice of: Morning start/);
   assert.match(markdown, /Completed \[Middos\]: yes/);
+  assert.match(markdown, /Resets:/);
+  assert.match(markdown, /trigger: Unstructured time; what mattered next: Learning; first action: Open Gemara; outcome: worked/);
   assert.doesNotMatch(markdown, /session_1|entry_1|metric_1/);
+});
+
+test('includes a reset-only day in review history', () => {
+  const markdown = _test.buildReadableCloudExport({
+    tables: {
+      reset_events: [{
+        id: 'reset_only',
+        reset_date: '2026-09-28',
+        initiated_at: '2026-09-28T14:00:00.000Z',
+        trigger: 'Tired',
+        what_matters_next: 'Take a walk',
+      }],
+    },
+  });
+
+  assert.match(markdown, /### 2026-09-28/);
+  assert.match(markdown, /Review: incomplete/);
+  assert.match(markdown, /trigger: Tired; what mattered next: Take a walk; outcome: not reviewed yet/);
 });
 
 test('removes control characters rejected by Google Docs', () => {

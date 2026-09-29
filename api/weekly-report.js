@@ -119,12 +119,31 @@ function buildAnalysisBrief(data) {
     'Daily reviews:',
     formatDailyLines(data.daily),
     '',
+    'Resets initiated during the week:',
+    formatResetLines(data.resets),
+    '',
     'Blockers:',
     formatBlockerLines(data.blockers),
     '',
     'Notable practice entries and notes:',
     formatEntryLines(data.notableEntries),
   ].join('\n');
+}
+
+function formatResetLines(resets) {
+  const lines = asArray(resets).map((reset) => {
+    const parts = [
+      `- ${reset.date}`,
+      reset.time ? `time=${reset.time}` : null,
+      `trigger=${reset.trigger || 'not specified'}`,
+      reset.triggerDetail ? `detail="${reset.triggerDetail}"` : null,
+      reset.whatMattersNext ? `what_mattered_next="${reset.whatMattersNext}"` : null,
+      reset.firstAction ? `first_action="${reset.firstAction}"` : null,
+      `outcome=${reset.outcome || 'not reviewed'}`,
+    ].filter(Boolean);
+    return parts.join('; ');
+  });
+  return lines.length ? lines.join('\n') : '- No resets initiated. This is neutral, not a missed goal.';
 }
 
 function formatScoreLines(items) {
@@ -235,6 +254,15 @@ function buildCompactReportData(data) {
     domains: cleanList(blocker.domains, 6, 70),
   }));
   const notableEntries = selectNotableEntries(asArray(data.rawEntries));
+  const resets = asArray(data.resets).slice(0, 20).map((reset) => ({
+    date: reset.date,
+    time: clean(reset.initiatedAt, 40),
+    trigger: clean(reset.trigger, 80),
+    triggerDetail: clean(reset.triggerDetail, 120),
+    whatMattersNext: clean(reset.whatMattersNext, TEXT_LIMIT),
+    firstAction: clean(reset.firstAction, TEXT_LIMIT),
+    outcome: reset.outcome ?? null,
+  }));
 
   return {
     weekStart: data.weekStart,
@@ -245,6 +273,7 @@ function buildCompactReportData(data) {
     domains,
     practices,
     daily,
+    resets,
     blockers,
     notableEntries,
   };
@@ -270,6 +299,7 @@ function buildTinyReportData(data) {
         text: clean(entry.text, 120),
       })),
     })),
+    resets: asArray(data.resets).slice(0, 12),
     blockers: asArray(data.blockers).slice(0, 8),
     notableEntries: asArray(data.notableEntries).slice(0, 18).map((entry) => ({
       date: entry.date,
@@ -320,6 +350,12 @@ function buildMinimalReportData(data) {
         practice: entry.practice,
         text: clean(entry.text, 80),
       })),
+    })),
+    resets: asArray(data.resets).slice(0, 8).map((reset) => ({
+      date: reset.date,
+      trigger: reset.trigger,
+      whatMattersNext: clean(reset.whatMattersNext, 100),
+      outcome: reset.outcome,
     })),
     blockers: asArray(data.blockers).slice(0, 5).map((blocker) => ({
       name: blocker.name,

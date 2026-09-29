@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Flame, LogIn, NotebookPen } from 'lucide-react-native';
+import { Bell, CalendarDays, Flame, LogIn, NotebookPen, RotateCcw } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -152,6 +152,11 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.statLabel}>day streak</Text>
       </View>
+
+      <Pressable accessibilityRole="button" onPress={() => router.push('/reset')} style={styles.resetButton}>
+        <RotateCcw color={colors.green} size={16} />
+        <Text style={styles.resetButtonText}>I need to reset</Text>
+      </Pressable>
 
       {hasMorningReminder ? (
         <View style={styles.reminderPanel}>
@@ -522,6 +527,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
+    textAlign: 'left',
+  },
+  resetButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+  },
+  resetButtonText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
     textAlign: 'left',
   },
   journalHeader: {

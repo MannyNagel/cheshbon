@@ -584,6 +584,11 @@ function TutorialSection() {
         'Notes are for short context that a metric cannot capture. Some practices benefit from notes, and some become cluttered by them. Turn notes on or off when creating or editing a practice. On the review page, use Add note when you want the one-line note box.',
     },
     {
+      title: 'Reset',
+      text:
+        'Use I need to reset on the Today page when part of the day has gone off track. Choose what knocked you off, name the one thing that matters next, and optionally enter the first action. The nightly review asks whether the reset worked. Reset is never required and does not affect completion, streaks, or practice scores.',
+    },
+    {
       title: 'Current Avodah',
       text:
         'Current Avodah is for the thing you want to carry forward. Daily Avodah can hold what you want to work on tomorrow. Weekly Avodah can hold a broader focus from Shabbos. The Today page shows the most recent relevant avodah when it exists.',

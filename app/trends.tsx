@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, Search, X } from 'lucide-react-native';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, RotateCcw, Search, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -142,6 +142,45 @@ export default function TrendsScreen() {
         )}
       </Section>
 
+      {summary.resetInsights.total ? (
+        <Section title="Resets">
+          <View style={styles.recoveryPanel}>
+            <View style={styles.recoveryHeading}>
+              <RotateCcw color={colors.green} size={20} />
+              <View style={styles.recoveryHeadingCopy}>
+                <Text style={styles.rowTitle}>Getting back on track</Text>
+                <Text style={styles.rowMeta}>Reset is an intervention, not a daily goal or score.</Text>
+              </View>
+            </View>
+            <View style={styles.recoveryStats}>
+              <ResetStat label="Initiated" value={String(summary.resetInsights.total)} />
+              <ResetStat label="Worked" value={String(summary.resetInsights.worked)} />
+              <ResetStat label="Partially" value={String(summary.resetInsights.partially)} />
+              <ResetStat label="Didn't work" value={String(summary.resetInsights.didNotWork)} />
+            </View>
+            {summary.resetInsights.recoveryRate != null ? (
+              <Text style={styles.recoverySummary}>
+                {summary.resetInsights.recoveryRate}% worked when reviewed
+                {summary.resetInsights.unrated ? ` | ${summary.resetInsights.unrated} awaiting follow-up` : ''}
+              </Text>
+            ) : null}
+            {summary.resetInsights.mostCommonTrigger ? (
+              <Text style={styles.rowMeta}>
+                Most common trigger: {summary.resetInsights.mostCommonTrigger}
+                {summary.resetInsights.mostCommonTimeOfDay ? ` | Most often: ${summary.resetInsights.mostCommonTimeOfDay.toLowerCase()}` : ''}
+              </Text>
+            ) : null}
+            <View style={styles.triggerWrap}>
+              {summary.resetInsights.triggerCounts.map((item) => (
+                <View key={item.trigger} style={styles.triggerChip}>
+                  <Text style={styles.triggerChipText}>{item.trigger} {item.count}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </Section>
+      ) : null}
+
       <Section title="Find Practices">
         <View style={styles.filterPanel}>
           <View style={styles.searchRow}>
@@ -217,6 +256,15 @@ export default function TrendsScreen() {
       </Section>
 
     </ScrollView>
+  );
+}
+
+function ResetStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.recoveryStat}>
+      <Text style={styles.recoveryStatValue}>{value}</Text>
+      <Text style={styles.recoveryStatLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -457,6 +505,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
+  recoveryHeading: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  recoveryHeadingCopy: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  recoveryPanel: {
+    backgroundColor: colors.surface,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  recoveryStat: {
+    backgroundColor: colors.paper,
+    borderColor: colors.softLine,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    minWidth: 120,
+    padding: spacing.md,
+  },
+  recoveryStatLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'left',
+  },
+  recoveryStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  recoveryStatValue: {
+    color: colors.green,
+    fontSize: 24,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
+  recoverySummary: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'left',
+  },
   rowHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -514,6 +611,24 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     maxWidth: 720,
     textAlign: 'left',
+  },
+  triggerChip: {
+    backgroundColor: colors.greenSoft,
+    borderColor: colors.green,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  triggerChipText: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  triggerWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   title: {
     color: colors.ink,

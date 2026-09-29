@@ -11,6 +11,8 @@ import type {
   MetricOption,
   MetricValueDraft,
   NightlyReviewDraft,
+  ResetEvent,
+  ResetOutcome,
   RoutineTemplate,
   TrendWeekMode,
 } from '@/src/models/types';
@@ -549,6 +551,25 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
         entryIds,
       )
     : [];
+  const resetRows = await db.getAllAsync<{
+    id: string;
+    reset_date: string;
+    initiated_at: string;
+    trigger: string;
+    trigger_detail: string | null;
+    what_matters_next: string;
+    first_action: string | null;
+    outcome: ResetOutcome | null;
+    reviewed_at: string | null;
+  }>(
+    `SELECT id, reset_date, initiated_at, trigger, trigger_detail, what_matters_next,
+      first_action, outcome, reviewed_at
+     FROM reset_events
+     WHERE user_id = ? AND reset_date = ?
+     ORDER BY initiated_at`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
 
   const byEntry = new Map(entries.map((entry) => [entry.id, entry]));
   const draftEntries: Record<string, EntryDraft> = {};
@@ -592,7 +613,47 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
       completedAt: session?.completed_at,
     },
     entries: draftEntries,
+    resets: resetRows.map(mapResetEvent),
   };
+}
+
+export async function createResetEvent(input: {
+  trigger: string;
+  triggerDetail?: string | null;
+  whatMattersNext: string;
+  firstAction?: string | null;
+}) {
+  const trigger = input.trigger.trim();
+  const whatMattersNext = input.whatMattersNext.trim();
+  if (!trigger) throw new Error('Choose what knocked you off track.');
+  if (!whatMattersNext) throw new Error('Name the one thing that matters next.');
+  if (trigger === 'Other' && !input.triggerDetail?.trim()) throw new Error('Briefly name what knocked you off track.');
+  const db = await getDb();
+  const event: ResetEvent = {
+    id: makeId('reset'),
+    resetDate: todayIsoDate(),
+    initiatedAt: new Date().toISOString(),
+    trigger,
+    triggerDetail: input.triggerDetail?.trim() || null,
+    whatMattersNext,
+    firstAction: input.firstAction?.trim() || null,
+    outcome: null,
+    reviewedAt: null,
+  };
+  await db.runAsync(
+    `INSERT INTO reset_events
+      (id, user_id, reset_date, initiated_at, trigger, trigger_detail, what_matters_next, first_action)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    event.id,
+    LOCAL_USER_ID,
+    event.resetDate,
+    event.initiatedAt,
+    event.trigger,
+    event.triggerDetail ?? null,
+    event.whatMattersNext,
+    event.firstAction ?? null,
+  );
+  return event;
 }
 
 export async function saveNightlyReview(reviewDate: string, draft: NightlyReviewDraft, options: { complete?: boolean } = {}) {
@@ -696,7 +757,56 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
         );
       }
     }
+    for (const reset of draft.resets ?? []) {
+      if (reset.resetDate !== reviewDate) continue;
+      const outcome = normalizeResetOutcome(reset.outcome);
+      await db.runAsync(
+        `UPDATE reset_events
+         SET reviewed_at = CASE
+            WHEN ? IS NULL THEN NULL
+            WHEN outcome = ? AND reviewed_at IS NOT NULL THEN reviewed_at
+            ELSE CURRENT_TIMESTAMP
+          END,
+          outcome = ?,
+          updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND user_id = ? AND reset_date = ?`,
+        outcome,
+        outcome,
+        outcome,
+        reset.id,
+        LOCAL_USER_ID,
+        reviewDate,
+      );
+    }
   });
+}
+
+function mapResetEvent(row: {
+  id: string;
+  reset_date: string;
+  initiated_at: string;
+  trigger: string;
+  trigger_detail: string | null;
+  what_matters_next: string;
+  first_action: string | null;
+  outcome: ResetOutcome | null;
+  reviewed_at: string | null;
+}): ResetEvent {
+  return {
+    id: row.id,
+    resetDate: row.reset_date,
+    initiatedAt: row.initiated_at,
+    trigger: row.trigger,
+    triggerDetail: row.trigger_detail,
+    whatMattersNext: row.what_matters_next,
+    firstAction: row.first_action,
+    outcome: normalizeResetOutcome(row.outcome),
+    reviewedAt: row.reviewed_at,
+  };
+}
+
+function normalizeResetOutcome(value: unknown): ResetOutcome | null {
+  return value === 'worked' || value === 'partially' || value === 'did_not_work' ? value : null;
 }
 
 async function upsertMetricValue(entryId: string, value: MetricValueDraft) {
@@ -1646,7 +1756,7 @@ export async function exportAllData() {
 
 export async function exportReadableData() {
   const db = await getDb();
-  const [domains, practices, routines, sessions, entries, weeklyReports] = await Promise.all([
+  const [domains, practices, routines, sessions, resets, entries, weeklyReports] = await Promise.all([
     db.getAllAsync<{ name: string; description: string | null; active: number }>(
       'SELECT name, description, active FROM domains ORDER BY sort_order, name',
     ),
@@ -1725,6 +1835,25 @@ export async function exportReadableData() {
        ORDER BY review_date DESC`,
     ),
     db.getAllAsync<{
+      reset_date: string;
+      initiated_at: string;
+      trigger: string;
+      trigger_detail: string | null;
+      what_matters_next: string;
+      first_action: string | null;
+      outcome: ResetOutcome | null;
+    }>(
+      `SELECT reset_date,
+        initiated_at,
+        trigger,
+        trigger_detail,
+        what_matters_next,
+        first_action,
+        outcome
+       FROM reset_events
+       ORDER BY initiated_at DESC`,
+    ),
+    db.getAllAsync<{
       entry_date: string;
       practice_name: string;
       parent_name: string | null;
@@ -1784,6 +1913,9 @@ export async function exportReadableData() {
     '## Daily Reviews',
     ...formatSessionExportRows(sessions),
     '',
+    '## Resets',
+    ...formatResetExportRows(resets),
+    '',
     '## Practice Entries',
     ...formatReadableEntryRows(entries),
     '',
@@ -1791,6 +1923,38 @@ export async function exportReadableData() {
     ...formatSavedReportRows(weeklyReports),
     '',
   ].join('\n');
+}
+
+function formatResetExportRows(
+  rows: Array<{
+    reset_date: string;
+    initiated_at: string;
+    trigger: string;
+    trigger_detail: string | null;
+    what_matters_next: string;
+    first_action: string | null;
+    outcome: ResetOutcome | null;
+  }>,
+) {
+  if (!rows.length) return ['No reset events.'];
+  return rows.map((row) =>
+    [
+      `- ${row.reset_date} at ${new Date(row.initiated_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      `trigger: ${row.trigger}${row.trigger_detail ? ` (${row.trigger_detail})` : ''}`,
+      `what mattered next: ${row.what_matters_next}`,
+      row.first_action ? `first action: ${row.first_action}` : null,
+      `outcome: ${formatResetOutcome(row.outcome)}`,
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function formatResetOutcome(outcome: ResetOutcome | null) {
+  if (outcome === 'worked') return 'worked';
+  if (outcome === 'partially') return 'partially worked';
+  if (outcome === 'did_not_work') return "didn't work";
+  return 'not reviewed yet';
 }
 
 function formatNamedRows(rows: Array<{ name: string; description: string | null; active: number }>) {
@@ -2014,6 +2178,7 @@ const exportTableNames = [
   'blockers',
   'routine_practices',
   'daily_review_sessions',
+  'reset_events',
   'daily_entries',
   'entry_metric_values',
   'practice_blockers',

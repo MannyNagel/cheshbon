@@ -3,7 +3,7 @@ import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import { getDb } from '@/src/db/client';
-import type { MetricType } from '@/src/models/types';
+import type { MetricType, ResetOutcome } from '@/src/models/types';
 import { addDaysIso, dayOfWeek, monthDay, todayIsoDate } from '@/src/utils/dates';
 import { makeId } from '@/src/utils/ids';
 
@@ -32,6 +32,16 @@ type SessionRow = {
   adjustment_for_tomorrow: string | null;
   note: string | null;
   completed_at: string | null;
+};
+
+type ResetRow = {
+  reset_date: string;
+  initiated_at: string;
+  trigger: string;
+  trigger_detail: string | null;
+  what_matters_next: string;
+  first_action: string | null;
+  outcome: ResetOutcome | null;
 };
 
 type ScoreSummary = {
@@ -84,6 +94,15 @@ export type WeeklyReportData = {
     adjustments: string[];
     notes: string[];
     textReflections: Array<{ practiceName: string; domainName: string; text: string }>;
+  }>;
+  resets: Array<{
+    date: string;
+    initiatedAt: string;
+    trigger: string;
+    triggerDetail: string | null;
+    whatMattersNext: string;
+    firstAction: string | null;
+    outcome: ResetOutcome | null;
   }>;
   rawEntries: Array<{
     date: string;
@@ -198,10 +217,11 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
   const { weekStart, weekEnd, reportThrough } = period;
   const previousWeekStart = addDaysIso(weekStart, -7);
   const previousWeekEnd = addDaysIso(weekStart, -1);
-  const [currentRows, previousRows, sessions] = await Promise.all([
+  const [currentRows, previousRows, sessions, resets] = await Promise.all([
     getScoreRows(weekStart, reportThrough),
     getScoreRows(previousWeekStart, previousWeekEnd),
     getSessions(weekStart, reportThrough),
+    getResets(weekStart, reportThrough),
   ]);
 
   const currentDomains = summarizeScores(currentRows, (row) => row.domain_id, (row) => row.domain_name);
@@ -232,6 +252,15 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
       }))
       .sort(sortByDeltaThenName),
     daily: buildDailySummaries(weekStart, reportThrough, currentRows, sessions),
+    resets: resets.map((reset) => ({
+      date: reset.reset_date,
+      initiatedAt: reset.initiated_at,
+      trigger: reset.trigger,
+      triggerDetail: cleanText(reset.trigger_detail),
+      whatMattersNext: reset.what_matters_next,
+      firstAction: cleanText(reset.first_action),
+      outcome: reset.outcome,
+    })),
     rawEntries: currentRows.map((row) => ({
       date: row.entry_date,
       domainName: row.domain_name,
@@ -300,11 +329,34 @@ export function formatWeeklyReportData(data: WeeklyReportData) {
     '## Daily Reviews',
     ...data.daily.flatMap(formatDailyReview),
     '',
+    '## Resets',
+    ...formatResetRows(data.resets),
+    '',
     '## Practice Entries',
     ...formatEntryRows(data.rawEntries),
     '',
   ];
   return lines.join('\n');
+}
+
+function formatResetRows(rows: WeeklyReportData['resets']) {
+  if (!rows.length) return ['No resets initiated this week.'];
+  return rows.map((row) =>
+    [
+      `- ${row.date} at ${new Date(row.initiatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+      `trigger: ${row.trigger}${row.triggerDetail ? ` (${row.triggerDetail})` : ''}`,
+      `what mattered next: ${row.whatMattersNext}`,
+      row.firstAction ? `first action: ${row.firstAction}` : null,
+      `outcome: ${formatResetOutcome(row.outcome)}`,
+    ].filter(Boolean).join('; '),
+  );
+}
+
+function formatResetOutcome(outcome: ResetOutcome | null) {
+  if (outcome === 'worked') return 'worked';
+  if (outcome === 'partially') return 'partially worked';
+  if (outcome === 'did_not_work') return "didn't work";
+  return 'not reviewed yet';
 }
 
 function formatScoreSummaryRows(rows: WeeklyReportData['domains']) {
@@ -469,6 +521,27 @@ async function getSessions(startDate: string, endDate: string) {
      WHERE review_date >= ?
       AND review_date <= ?
      ORDER BY review_date`,
+    startDate,
+    endDate,
+  );
+}
+
+async function getResets(startDate: string, endDate: string) {
+  const db = await getDb();
+  return db.getAllAsync<ResetRow>(
+    `SELECT reset_date,
+      initiated_at,
+      trigger,
+      trigger_detail,
+      what_matters_next,
+      first_action,
+      outcome
+     FROM reset_events
+     WHERE user_id = ?
+      AND reset_date >= ?
+      AND reset_date <= ?
+     ORDER BY initiated_at`,
+    LOCAL_USER_ID,
     startDate,
     endDate,
   );

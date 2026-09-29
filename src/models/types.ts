@@ -127,9 +127,24 @@ export type ReviewSessionDraft = {
   completedAt?: string | null;
 };
 
+export type ResetOutcome = 'worked' | 'partially' | 'did_not_work';
+
+export type ResetEvent = {
+  id: string;
+  resetDate: string;
+  initiatedAt: string;
+  trigger: string;
+  triggerDetail?: string | null;
+  whatMattersNext: string;
+  firstAction?: string | null;
+  outcome?: ResetOutcome | null;
+  reviewedAt?: string | null;
+};
+
 export type NightlyReviewDraft = {
   session: ReviewSessionDraft;
   entries: Record<string, EntryDraft>;
+  resets: ResetEvent[];
 };
 
 export type TrendSummary = {
@@ -163,6 +178,17 @@ export type TrendSummary = {
     blockerName: string;
     count: number;
   }>;
+  resetInsights: {
+    total: number;
+    worked: number;
+    partially: number;
+    didNotWork: number;
+    unrated: number;
+    recoveryRate: number | null;
+    mostCommonTrigger: string | null;
+    mostCommonTimeOfDay: string | null;
+    triggerCounts: Array<{ trigger: string; count: number }>;
+  };
 };
 
 export type QualitativeTrendSummary = {

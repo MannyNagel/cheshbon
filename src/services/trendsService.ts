@@ -1,4 +1,5 @@
 import { getDb } from '@/src/db/client';
+import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import type { MetricType, QualitativeTrendSummary, TrendSummary, TrendWeekMode, TrendWindow } from '@/src/models/types';
 import { getTrendPreferences } from '@/src/repositories/cheshbonRepo';
 import { addDaysIso, dayOfWeek, daysAgoIso, shortDayName, todayIsoDate } from '@/src/utils/dates';
@@ -48,6 +49,12 @@ type QualitativeBlockerRow = {
   domain_name: string;
 };
 
+type ResetInsightRow = {
+  trigger: string;
+  initiated_at: string;
+  outcome: string | null;
+};
+
 export async function getTrendSummary(): Promise<TrendSummary> {
   const db = await getDb();
   const trendPreferences = await getTrendPreferences();
@@ -81,9 +88,16 @@ export async function getTrendSummary(): Promise<TrendSummary> {
   );
 
   const practices = groupPractices(metricRows);
-  const [scores7, scores30] = await Promise.all([
+  const [scores7, scores30, resetRows] = await Promise.all([
     getPracticeScores(weekWindow.start, weekWindow.end),
     getPracticeScores(start30),
+    db.getAllAsync<ResetInsightRow>(
+      `SELECT trigger, initiated_at, outcome
+       FROM reset_events
+       WHERE user_id = ?
+       ORDER BY initiated_at DESC`,
+      LOCAL_USER_ID,
+    ),
   ]);
 
   const domainInsights = buildDomainInsights(scores7, scores30);
@@ -102,6 +116,43 @@ export async function getTrendSummary(): Promise<TrendSummary> {
     domainInsights,
     practiceTrends,
     commonBlockers: [],
+    resetInsights: buildResetInsights(resetRows),
+  };
+}
+
+export function buildResetInsights(rows: ResetInsightRow[]): TrendSummary['resetInsights'] {
+  const worked = rows.filter((row) => row.outcome === 'worked').length;
+  const partially = rows.filter((row) => row.outcome === 'partially').length;
+  const didNotWork = rows.filter((row) => row.outcome === 'did_not_work').length;
+  const rated = worked + partially + didNotWork;
+  const triggerCountsMap = new Map<string, number>();
+  const timeCountsMap = new Map<string, number>();
+
+  for (const row of rows) {
+    const trigger = row.trigger.trim() || 'Not specified';
+    triggerCountsMap.set(trigger, (triggerCountsMap.get(trigger) ?? 0) + 1);
+    const hour = new Date(row.initiated_at).getHours();
+    const timeOfDay = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+    timeCountsMap.set(timeOfDay, (timeCountsMap.get(timeOfDay) ?? 0) + 1);
+  }
+
+  const triggerCounts = [...triggerCountsMap.entries()]
+    .map(([trigger, count]) => ({ trigger, count }))
+    .sort((a, b) => b.count - a.count || a.trigger.localeCompare(b.trigger));
+  const timeCounts = [...timeCountsMap.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+  return {
+    total: rows.length,
+    worked,
+    partially,
+    didNotWork,
+    unrated: rows.length - rated,
+    recoveryRate: rated ? Math.round((worked / rated) * 100) : null,
+    mostCommonTrigger: triggerCounts[0]?.trigger ?? null,
+    mostCommonTimeOfDay: timeCounts[0]?.label ?? null,
+    triggerCounts,
   };
 }
 

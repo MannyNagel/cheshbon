@@ -707,6 +707,7 @@ const resetTableNames = [
   'blockers',
   'routine_practices',
   'daily_review_sessions',
+  'reset_events',
   'daily_entries',
   'entry_metric_values',
   'practice_blockers',

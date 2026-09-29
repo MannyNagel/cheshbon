@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ReviewSection } from '@/src/components/ReviewSection';
+import { ResetReviewSection } from '@/src/components/ResetReviewSection';
 import { colors, spacing } from '@/src/components/ui';
 import type { EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
 import { getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
@@ -19,7 +20,7 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const [reviewDate, setReviewDate] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [dateInput, setDateInput] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [sections, setSections] = useState<NightlyReviewSection[]>([]);
-  const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {} });
+  const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {}, resets: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -71,6 +72,13 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
         ...current.entries,
         [entry.practiceId]: entry,
       },
+    }));
+  }
+
+  function updateReset(reset: NightlyReviewDraft['resets'][number]) {
+    setDraft((current) => ({
+      ...current,
+      resets: current.resets.map((item) => item.id === reset.id ? reset : item),
     }));
   }
 
@@ -235,6 +243,8 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
               />
             ))
           )}
+
+          <ResetReviewSection resets={draft.resets} onChange={updateReset} />
 
           <View style={styles.actionRow}>
             <Pressable accessibilityRole="button" disabled={saving} onPress={() => save(false)} style={styles.progressButton}>

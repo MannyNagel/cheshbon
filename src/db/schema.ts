@@ -144,6 +144,21 @@ CREATE TABLE IF NOT EXISTS daily_review_sessions (
   UNIQUE(user_id, review_date)
 );
 
+CREATE TABLE IF NOT EXISTS reset_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  reset_date TEXT NOT NULL,
+  initiated_at TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  trigger_detail TEXT,
+  what_matters_next TEXT NOT NULL,
+  first_action TEXT,
+  outcome TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS daily_entries (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -246,6 +261,8 @@ CREATE INDEX IF NOT EXISTS idx_routine_exceptions_routine_date ON routine_except
 CREATE INDEX IF NOT EXISTS idx_routine_practices_routine_id ON routine_practices(routine_template_id);
 CREATE INDEX IF NOT EXISTS idx_routine_practices_practice_id ON routine_practices(practice_id);
 CREATE INDEX IF NOT EXISTS idx_daily_review_sessions_user_date ON daily_review_sessions(user_id, review_date);
+CREATE INDEX IF NOT EXISTS idx_reset_events_user_date ON reset_events(user_id, reset_date);
+CREATE INDEX IF NOT EXISTS idx_reset_events_initiated_at ON reset_events(initiated_at);
 CREATE INDEX IF NOT EXISTS idx_daily_entries_user_date ON daily_entries(user_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_daily_entries_practice_date ON daily_entries(practice_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_entry_metric_values_entry_id ON entry_metric_values(entry_id);

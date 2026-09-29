@@ -169,6 +169,7 @@ export default function WeeklyReportScreen() {
           <SummaryPill label="Domains" value={String(data.domains.length)} />
           <SummaryPill label="Practices" value={String(data.practices.length)} />
           <SummaryPill label="Days reviewed" value={String(data.daily.filter((day) => day.completed).length)} />
+          {data.resets.length ? <SummaryPill label="Resets" value={String(data.resets.length)} /> : null}
         </View>
       ) : null}
 

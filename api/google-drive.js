@@ -422,6 +422,7 @@ function buildReadableCloudExport(snapshot) {
   const sections = rows(tables.review_sections);
   const routinePractices = rows(tables.routine_practices).filter((item) => !item.archived_from);
   const sessions = rows(tables.daily_review_sessions);
+  const resets = rows(tables.reset_events);
   const entries = rows(tables.daily_entries);
   const metricValues = rows(tables.entry_metric_values);
   const weeklyReviews = rows(tables.weekly_reviews);
@@ -434,6 +435,7 @@ function buildReadableCloudExport(snapshot) {
   const routineById = byId(routines);
   const metricValuesByEntry = groupBy(metricValues, 'entry_id');
   const entriesByDate = groupBy(entries, 'entry_date');
+  const resetsByDate = groupBy(resets, 'reset_date');
   const schedulesByRoutine = groupBy(schedules, 'routine_template_id');
   const practicesByRoutine = groupBy(routinePractices, 'routine_template_id');
 
@@ -514,6 +516,7 @@ function buildReadableCloudExport(snapshot) {
   lines.push('## Review History');
   const reviewDates = new Set([
     ...sessions.map((session) => session.review_date),
+    ...resets.map((reset) => reset.reset_date),
     ...entries.map((entry) => entry.entry_date),
   ].filter(Boolean));
   const sessionByDate = new Map(sessions.map((session) => [session.review_date, session]));
@@ -527,6 +530,22 @@ function buildReadableCloudExport(snapshot) {
     appendOptionalLine(lines, 'Pattern noticed', session?.pattern_noticed);
     appendOptionalLine(lines, 'Adjustment for tomorrow', session?.adjustment_for_tomorrow);
     appendOptionalLine(lines, 'Review note', session?.note);
+
+    const dailyResets = resetsByDate.get(date) ?? [];
+    if (dailyResets.length) {
+      lines.push('Resets:');
+      for (const reset of dailyResets) {
+        lines.push(
+          [
+            `- ${formatCloudResetTime(reset.initiated_at)}`,
+            `trigger: ${textValue(reset.trigger, 'Not specified')}${reset.trigger_detail ? ` (${reset.trigger_detail})` : ''}`,
+            `what mattered next: ${textValue(reset.what_matters_next, 'Not recorded')}`,
+            reset.first_action ? `first action: ${reset.first_action}` : null,
+            `outcome: ${formatCloudResetOutcome(reset.outcome)}`,
+          ].filter(Boolean).join('; '),
+        );
+      }
+    }
 
     const dailyEntries = entriesByDate.get(date) ?? [];
     if (!dailyEntries.length) lines.push('- No practice entries.');
@@ -575,6 +594,20 @@ function buildReadableCloudExport(snapshot) {
   }
 
   return lines.join('\n');
+}
+
+function formatCloudResetTime(value) {
+  if (!value) return 'Time not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return `Initiated ${date.toISOString()}`;
+}
+
+function formatCloudResetOutcome(outcome) {
+  if (outcome === 'worked') return 'worked';
+  if (outcome === 'partially') return 'partially worked';
+  if (outcome === 'did_not_work') return "didn't work";
+  return 'not reviewed yet';
 }
 
 function formatCloudMetricValue(value, metric, domainById, practiceDomainId) {
