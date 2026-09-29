@@ -99,6 +99,10 @@ export default function RootLayout() {
         <Tabs.Screen name="welcome" options={{ href: null, title: 'Welcome' }} />
         <Tabs.Screen name="domain-trends/[domainId]" options={{ href: null, title: 'Domain Trends' }} />
         <Tabs.Screen name="weekly-report" options={{ href: null, title: 'Weekly Report' }} />
+        <Tabs.Screen name="weekly-cheshbon" options={{ href: null, title: 'Weekly Cheshbon' }} />
+        <Tabs.Screen name="avodah/index" options={{ href: null, title: 'Avodah' }} />
+        <Tabs.Screen name="avodah/edit" options={{ href: null, title: 'Avodah Experiment' }} />
+        <Tabs.Screen name="avodah/review" options={{ href: null, title: 'Avodah Review' }} />
         <Tabs.Screen name="reset" options={{ href: null, title: 'Reset' }} />
       </Tabs>
     </SafeAreaProvider>

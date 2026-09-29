@@ -427,6 +427,10 @@ function buildReadableCloudExport(snapshot) {
   const metricValues = rows(tables.entry_metric_values);
   const weeklyReviews = rows(tables.weekly_reviews);
   const weeklyReports = rows(tables.weekly_reports);
+  const avodahExperiments = rows(tables.avodah_experiments);
+  const avodahEntries = rows(tables.avodah_daily_entries);
+  const avodahWeeklyReviews = rows(tables.avodah_weekly_reviews);
+  const avodahFinalReviews = rows(tables.avodah_final_reviews);
 
   const domainById = byId(domains);
   const practiceById = byId(practices);
@@ -569,6 +573,38 @@ function buildReadableCloudExport(snapshot) {
     lines.push('');
   }
   if (!reviewDates.size) lines.push('No daily reviews.', '');
+
+  lines.push('## Avodah Experiments');
+  if (!avodahExperiments.length) lines.push('No Avodah experiments.');
+  for (const experiment of [...avodahExperiments].sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)))) {
+    lines.push(
+      `### ${textValue(experiment.title, 'Untitled experiment')} (${textValue(experiment.experiment_type, 'avodah')})`,
+      `Status: ${textValue(experiment.status, 'unknown')}`,
+      `Dates: ${textValue(experiment.start_date, 'unknown')} to ${textValue(experiment.review_date, 'unknown')}`,
+      `Goal: ${textValue(experiment.goal, 'Not recorded')}`,
+      `Behavior: ${textValue(experiment.behavior, 'Not recorded')}`,
+    );
+    appendOptionalLine(lines, 'Hypothesis', experiment.hypothesis);
+    if (experiment.parent_experiment_id) lines.push(`Modified from: ${experiment.parent_experiment_id}`);
+    const experimentEntries = avodahEntries
+      .filter((entry) => entry.experiment_id === experiment.id)
+      .sort((a, b) => String(b.review_date).localeCompare(String(a.review_date)));
+    for (const entry of experimentEntries) {
+      lines.push(
+        [`- ${entry.review_date}`, entry.opportunity == null ? 'opportunity not answered' : `opportunity ${Number(entry.opportunity) ? 'yes' : 'no'}`, entry.response ? `response ${String(entry.response).replace(/_/g, ' ')}` : null, entry.reflection ? `reflection: ${entry.reflection}` : null]
+          .filter(Boolean)
+          .join('; '),
+      );
+    }
+    for (const review of avodahWeeklyReviews.filter((item) => item.experiment_id === experiment.id)) {
+      lines.push(`- Week of ${review.week_start_date}: ${textValue(review.learning, 'No learning recorded')}${review.decision ? `; decision ${review.decision}` : ''}`);
+    }
+    const finalReview = avodahFinalReviews.find((item) => item.experiment_id === experiment.id);
+    if (finalReview) {
+      lines.push(`Final review: helped ${textValue(finalReview.helped, 'not answered')}; changed: ${textValue(finalReview.what_changed, 'not recorded')}; learned: ${textValue(finalReview.learned, 'not recorded')}; decision: ${textValue(finalReview.decision, 'not recorded')}`);
+    }
+    lines.push('');
+  }
 
   lines.push('## Weekly Reflections');
   if (!weeklyReviews.length) lines.push('No weekly reflections.');

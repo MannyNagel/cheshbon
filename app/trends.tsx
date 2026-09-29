@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, RotateCcw, Search, X } from 'lucide-react-native';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText, FlaskConical, RotateCcw, Search, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -7,6 +7,7 @@ import type { DimensionValue } from 'react-native';
 import { TrendPracticeCard } from '@/src/components/TrendPracticeCard';
 import { colors, spacing } from '@/src/components/ui';
 import type { TrendSummary, TrendWeekMode } from '@/src/models/types';
+import { listAvodahExperiments, type AvodahExperimentWithStats } from '@/src/repositories/avodahRepo';
 import { updateTrendPreferences } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getTrendSummary } from '@/src/services/trendsService';
@@ -22,9 +23,13 @@ export default function TrendsScreen() {
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [selectedMetricIds, setSelectedMetricIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [experiments, setExperiments] = useState<AvodahExperimentWithStats[]>([]);
 
   useEffect(() => {
-    getTrendSummary().then(setSummary);
+    Promise.all([getTrendSummary(), listAvodahExperiments()]).then(([nextSummary, nextExperiments]) => {
+      setSummary(nextSummary);
+      setExperiments(nextExperiments);
+    });
   }, []);
 
   const filteredPractices = useMemo(() => {
@@ -114,7 +119,7 @@ export default function TrendsScreen() {
         </View>
       </Section>
 
-      <Section title="Domains">
+      <Section title="Foundation Domains">
         {summary.domainInsights.length ? (
           <View style={styles.domainGrid}>
             {summary.domainInsights.map((domain) => (
@@ -141,6 +146,29 @@ export default function TrendsScreen() {
           <Empty text="Complete a few non-text reviews and domain patterns will start to appear." />
         )}
       </Section>
+
+      {experiments.length ? (
+        <Section title="Avodah Experiments">
+          <View style={styles.experimentIntro}>
+            <Text style={styles.rowMeta}>Experiments are shown as evidence and learning, separate from Foundation scores.</Text>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/avodah')} style={styles.reportButton}>
+              <FlaskConical color={colors.amber} size={18} />
+              <Text style={[styles.reportButtonText, styles.avodahLinkText]}>Manage Avodah</Text>
+            </Pressable>
+          </View>
+          <View style={styles.domainGrid}>
+            {experiments.map((experiment) => (
+              <Pressable accessibilityRole="button" key={experiment.id} onPress={() => router.push({ pathname: '/avodah/review', params: { id: experiment.id } })} style={styles.experimentCard}>
+                <Text style={styles.experimentType}>{experiment.type === 'middah' ? 'Middah' : 'Avodah'} · {experiment.status}</Text>
+                <Text style={styles.rowTitle}>{experiment.title}</Text>
+                <Text style={styles.experimentBehavior}>{experiment.behavior}</Text>
+                <Text style={styles.rowMeta}>{experiment.stats.opportunities} opportunities · {experiment.stats.didWell} strong · {experiment.stats.mixed} mixed · {experiment.stats.missed} missed</Text>
+                <Text style={styles.domainLink}>{experiment.stats.evidence.length} reflections recorded</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Section>
+      ) : null}
 
       {summary.resetInsights.total ? (
         <Section title="Resets">
@@ -326,6 +354,9 @@ function kindLabel(kind: TrendSummary['practiceTrends'][number]['metricKind']) {
 }
 
 const styles = StyleSheet.create({
+  avodahLinkText: {
+    color: colors.amber,
+  },
   center: {
     alignItems: 'center',
     backgroundColor: colors.paper,
@@ -384,6 +415,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     textAlign: 'left',
+  },
+  experimentBehavior: {
+    backgroundColor: colors.amberSoft,
+    borderRadius: 8,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    padding: spacing.sm,
+    textAlign: 'left',
+  },
+  experimentCard: {
+    backgroundColor: '#FFFCF6',
+    borderColor: '#E7C98E',
+    borderLeftColor: colors.amber,
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    gap: spacing.sm,
+    minWidth: 230,
+    padding: spacing.lg,
+  },
+  experimentIntro: {
+    gap: spacing.md,
+  },
+  experimentType: {
+    color: colors.amber,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   eyebrow: {
     color: colors.green,

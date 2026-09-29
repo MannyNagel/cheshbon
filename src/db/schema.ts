@@ -159,6 +159,74 @@ CREATE TABLE IF NOT EXISTS reset_events (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS avodah_experiments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  experiment_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  goal TEXT NOT NULL,
+  hypothesis TEXT,
+  behavior TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  review_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  opportunity_prompt TEXT NOT NULL,
+  response_prompt TEXT NOT NULL,
+  reflection_prompt TEXT,
+  positive_label TEXT NOT NULL DEFAULT 'Did well',
+  partial_label TEXT NOT NULL DEFAULT 'Mixed',
+  negative_label TEXT NOT NULL DEFAULT 'Missed the opportunity',
+  parent_experiment_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_experiment_id) REFERENCES avodah_experiments(id)
+);
+
+CREATE TABLE IF NOT EXISTS avodah_daily_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  experiment_id TEXT NOT NULL,
+  review_date TEXT NOT NULL,
+  opportunity INTEGER,
+  response TEXT,
+  reflection TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (experiment_id) REFERENCES avodah_experiments(id),
+  UNIQUE(user_id, experiment_id, review_date)
+);
+
+CREATE TABLE IF NOT EXISTS avodah_weekly_reviews (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  experiment_id TEXT NOT NULL,
+  week_start_date TEXT NOT NULL,
+  learning TEXT,
+  decision TEXT,
+  successor_experiment_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (experiment_id) REFERENCES avodah_experiments(id),
+  FOREIGN KEY (successor_experiment_id) REFERENCES avodah_experiments(id),
+  UNIQUE(user_id, experiment_id, week_start_date)
+);
+
+CREATE TABLE IF NOT EXISTS avodah_final_reviews (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  experiment_id TEXT NOT NULL,
+  helped TEXT,
+  what_changed TEXT,
+  learned TEXT,
+  decision TEXT NOT NULL,
+  successor_experiment_id TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (experiment_id) REFERENCES avodah_experiments(id),
+  FOREIGN KEY (successor_experiment_id) REFERENCES avodah_experiments(id),
+  UNIQUE(user_id, experiment_id)
+);
+
 CREATE TABLE IF NOT EXISTS daily_entries (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -227,6 +295,8 @@ CREATE TABLE IF NOT EXISTS weekly_reviews (
   what_needs_work TEXT,
   pattern_noticed TEXT,
   one_kabbalah TEXT,
+  keep_doing TEXT,
+  change_next_week TEXT,
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -263,6 +333,10 @@ CREATE INDEX IF NOT EXISTS idx_routine_practices_practice_id ON routine_practice
 CREATE INDEX IF NOT EXISTS idx_daily_review_sessions_user_date ON daily_review_sessions(user_id, review_date);
 CREATE INDEX IF NOT EXISTS idx_reset_events_user_date ON reset_events(user_id, reset_date);
 CREATE INDEX IF NOT EXISTS idx_reset_events_initiated_at ON reset_events(initiated_at);
+CREATE INDEX IF NOT EXISTS idx_avodah_experiments_user_status ON avodah_experiments(user_id, status, experiment_type);
+CREATE INDEX IF NOT EXISTS idx_avodah_experiments_dates ON avodah_experiments(start_date, review_date);
+CREATE INDEX IF NOT EXISTS idx_avodah_daily_entries_experiment_date ON avodah_daily_entries(experiment_id, review_date);
+CREATE INDEX IF NOT EXISTS idx_avodah_weekly_reviews_week ON avodah_weekly_reviews(week_start_date);
 CREATE INDEX IF NOT EXISTS idx_daily_entries_user_date ON daily_entries(user_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_daily_entries_practice_date ON daily_entries(practice_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_entry_metric_values_entry_id ON entry_metric_values(entry_id);

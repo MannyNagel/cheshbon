@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import { getDb } from '@/src/db/client';
 import type { MetricType, ResetOutcome } from '@/src/models/types';
+import { getWeeklyAvodahData } from '@/src/repositories/avodahRepo';
 import { addDaysIso, dayOfWeek, monthDay, todayIsoDate } from '@/src/utils/dates';
 import { makeId } from '@/src/utils/ids';
 
@@ -103,6 +104,22 @@ export type WeeklyReportData = {
     whatMattersNext: string;
     firstAction: string | null;
     outcome: ResetOutcome | null;
+  }>;
+  avodahExperiments: Array<{
+    id: string;
+    type: 'avodah' | 'middah';
+    title: string;
+    goal: string;
+    behavior: string;
+    status: string;
+    opportunities: number;
+    noOpportunity: number;
+    didWell: number;
+    mixed: number;
+    missed: number;
+    evidence: Array<{ date: string; reflection: string; response: string | null }>;
+    weeklyLearning: string;
+    weeklyDecision: string | null;
   }>;
   rawEntries: Array<{
     date: string;
@@ -217,11 +234,12 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
   const { weekStart, weekEnd, reportThrough } = period;
   const previousWeekStart = addDaysIso(weekStart, -7);
   const previousWeekEnd = addDaysIso(weekStart, -1);
-  const [currentRows, previousRows, sessions, resets] = await Promise.all([
+  const [currentRows, previousRows, sessions, resets, avodahData] = await Promise.all([
     getScoreRows(weekStart, reportThrough),
     getScoreRows(previousWeekStart, previousWeekEnd),
     getSessions(weekStart, reportThrough),
     getResets(weekStart, reportThrough),
+    getWeeklyAvodahData(weekStart),
   ]);
 
   const currentDomains = summarizeScores(currentRows, (row) => row.domain_id, (row) => row.domain_name);
@@ -260,6 +278,22 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
       whatMattersNext: reset.what_matters_next,
       firstAction: cleanText(reset.first_action),
       outcome: reset.outcome,
+    })),
+    avodahExperiments: avodahData.map((item) => ({
+      id: item.experiment.id,
+      type: item.experiment.type,
+      title: item.experiment.title,
+      goal: item.experiment.goal,
+      behavior: item.experiment.behavior,
+      status: item.experiment.status,
+      opportunities: item.stats.opportunities,
+      noOpportunity: item.stats.noOpportunity,
+      didWell: item.stats.didWell,
+      mixed: item.stats.mixed,
+      missed: item.stats.missed,
+      evidence: item.stats.evidence,
+      weeklyLearning: item.learning,
+      weeklyDecision: item.decision,
     })),
     rawEntries: currentRows.map((row) => ({
       date: row.entry_date,
@@ -332,11 +366,28 @@ export function formatWeeklyReportData(data: WeeklyReportData) {
     '## Resets',
     ...formatResetRows(data.resets),
     '',
+    '## Avodah Experiments',
+    ...formatWeeklyAvodahRows(data.avodahExperiments),
+    '',
     '## Practice Entries',
     ...formatEntryRows(data.rawEntries),
     '',
   ];
   return lines.join('\n');
+}
+
+function formatWeeklyAvodahRows(rows: WeeklyReportData['avodahExperiments']) {
+  if (!rows.length) return ['No active Avodah experiments overlapped this week.'];
+  return rows.flatMap((row) => [
+    `### ${row.title} (${row.type})`,
+    `Goal: ${row.goal}`,
+    `Behavior: ${row.behavior}`,
+    `Opportunities: ${row.opportunities}; did well: ${row.didWell}; mixed: ${row.mixed}; missed: ${row.missed}; no opportunity: ${row.noOpportunity}`,
+    ...(row.evidence.length ? row.evidence.map((item) => `- ${item.date}: ${item.response?.replace(/_/g, ' ') ?? 'response not recorded'}; ${item.reflection}`) : ['- No written evidence this week.']),
+    ...(row.weeklyLearning ? [`Weekly learning: ${row.weeklyLearning}`] : []),
+    ...(row.weeklyDecision ? [`Weekly decision: ${row.weeklyDecision}`] : []),
+    '',
+  ]);
 }
 
 function formatResetRows(rows: WeeklyReportData['resets']) {

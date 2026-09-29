@@ -5,8 +5,10 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 
 import { ReviewSection } from '@/src/components/ReviewSection';
 import { ResetReviewSection } from '@/src/components/ResetReviewSection';
+import { AvodahDailyReviewSection } from '@/src/components/AvodahDailyReviewSection';
 import { colors, spacing } from '@/src/components/ui';
-import type { EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
+import type { AvodahDailyEntry, AvodahExperiment, EntryDraft, NightlyReviewDraft, NightlyReviewSection } from '@/src/models/types';
+import { getActiveAvodahExperimentsForDate } from '@/src/repositories/avodahRepo';
 import { getCurrentReviewStreak, getReviewDraft, getReviewStatusMap, saveNightlyReview } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
 import { getNightlyReviewItems } from '@/src/services/activeRoutineService';
@@ -20,7 +22,8 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const [reviewDate, setReviewDate] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [dateInput, setDateInput] = useState(() => normalizeReviewDate(initialDate) ?? todayIsoDate());
   const [sections, setSections] = useState<NightlyReviewSection[]>([]);
-  const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {}, resets: [] });
+  const [experiments, setExperiments] = useState<AvodahExperiment[]>([]);
+  const [draft, setDraft] = useState<NightlyReviewDraft>({ session: {}, entries: {}, resets: [], avodahEntries: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -41,11 +44,13 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const range = getCalendarRange(reviewDate, calendarMode);
-    const [reviewSections, savedDraft] = await Promise.all([
+    const [reviewSections, savedDraft, activeExperiments] = await Promise.all([
       getNightlyReviewItems(reviewDate),
       getReviewDraft(reviewDate),
+      getActiveAvodahExperimentsForDate(reviewDate),
     ]);
     setSections(reviewSections);
+    setExperiments(activeExperiments);
     setDraft(savedDraft);
     setLoading(false);
     const [nextSavedDates, nextStreak] = await Promise.all([
@@ -79,6 +84,13 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
     setDraft((current) => ({
       ...current,
       resets: current.resets.map((item) => item.id === reset.id ? reset : item),
+    }));
+  }
+
+  function updateAvodahEntry(entry: AvodahDailyEntry) {
+    setDraft((current) => ({
+      ...current,
+      avodahEntries: { ...current.avodahEntries, [entry.experimentId]: entry },
     }));
   }
 
@@ -235,14 +247,23 @@ export function NightlyReviewScreen({ initialDate = todayIsoDate() }: Props) {
             <Text style={styles.empty}>No routines are active for this date.</Text>
           ) : (
             sections.map((section) => (
-              <ReviewSection
-                entries={draft.entries}
-                key={section.id}
-                onEntryChange={updateEntry}
-                section={section}
-              />
+              <View key={section.id} style={styles.sectionPair}>
+                {section.id === 'section_overall' ? (
+                  <AvodahDailyReviewSection
+                    entries={draft.avodahEntries}
+                    experiments={experiments}
+                    onChange={updateAvodahEntry}
+                    reviewDate={reviewDate}
+                  />
+                ) : null}
+                <ReviewSection entries={draft.entries} onEntryChange={updateEntry} section={section} />
+              </View>
             ))
           )}
+
+          {experiments.length > 0 && !sections.some((section) => section.id === 'section_overall') ? (
+            <AvodahDailyReviewSection entries={draft.avodahEntries} experiments={experiments} onChange={updateAvodahEntry} reviewDate={reviewDate} />
+          ) : null}
 
           <ResetReviewSection resets={draft.resets} onChange={updateReset} />
 
@@ -512,6 +533,9 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.xl,
     padding: spacing.lg,
+  },
+  sectionPair: {
+    gap: spacing.xl,
   },
   empty: {
     color: colors.muted,

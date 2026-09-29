@@ -141,10 +141,46 @@ export type ResetEvent = {
   reviewedAt?: string | null;
 };
 
+export type AvodahExperimentType = 'avodah' | 'middah';
+export type AvodahExperimentStatus = 'draft' | 'active' | 'reviewing' | 'graduated' | 'modified' | 'abandoned';
+export type AvodahResponse = 'did_well' | 'mixed' | 'missed';
+export type AvodahDecision = 'continue' | 'modify' | 'graduate' | 'abandon';
+
+export type AvodahExperiment = {
+  id: string;
+  type: AvodahExperimentType;
+  title: string;
+  goal: string;
+  hypothesis?: string | null;
+  behavior: string;
+  startDate: string;
+  reviewDate: string;
+  status: AvodahExperimentStatus;
+  opportunityPrompt: string;
+  responsePrompt: string;
+  reflectionPrompt?: string | null;
+  positiveLabel: string;
+  partialLabel: string;
+  negativeLabel: string;
+  parentExperimentId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type AvodahDailyEntry = {
+  id?: string | null;
+  experimentId: string;
+  reviewDate: string;
+  opportunity?: boolean | null;
+  response?: AvodahResponse | null;
+  reflection?: string | null;
+};
+
 export type NightlyReviewDraft = {
   session: ReviewSessionDraft;
   entries: Record<string, EntryDraft>;
   resets: ResetEvent[];
+  avodahEntries: Record<string, AvodahDailyEntry>;
 };
 
 export type TrendSummary = {

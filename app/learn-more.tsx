@@ -42,6 +42,15 @@ const articleSections = [
     paragraphs: [],
   },
   {
+    title: 'Foundations and Avodah',
+    paragraphs: [
+      'Daily Cheshbon separates two kinds of growth work that are easy to confuse.',
+      'Foundations are the recurring practices that show how you are living: davening, learning, eating, gratitude, middos, and the other parts of life you want to review consistently. They help you notice patterns over time.',
+      'Avodah is a temporary, focused experiment. It names one thing you are deliberately trying to change, the concrete behavior you will practice, and the date when you will stop and learn from the evidence. A Current Middah can run alongside it when you want a focused character-development experiment.',
+      'Avodah is not another score. At night, the app asks whether an opportunity arose, how you responded, and what you noticed. At the end, you decide whether to Continue, Modify, Graduate, or Abandon the experiment. Each result is useful information.',
+    ],
+  },
+  {
     title: '1. Review Your Day at Night',
     paragraphs: [
       'Daily Cheshbon is designed to be filled out at night.',
@@ -78,6 +87,13 @@ const articleSections = [
       'You can begin to ask deeper questions:',
       'Am I becoming more consistent?\nWhich habits are improving?\nWhich areas keep slipping?\nWhat routines help me succeed?\nWhich environments make growth harder?\nWhat should I focus on next?',
       'The app turns daily reflection into long-term self-knowledge.',
+    ],
+  },
+  {
+    title: '5. Make a Weekly Cheshbon',
+    paragraphs: [
+      'The Weekly Cheshbon gives you a compact view of your Foundations without making the averages the center of the experience.',
+      'Name one win, one pattern, what you want to keep doing, and what you want to change. For an active Avodah experiment, review the opportunities and written evidence, record what the week taught you, and decide whether the experiment should continue or change.',
     ],
   },
   {

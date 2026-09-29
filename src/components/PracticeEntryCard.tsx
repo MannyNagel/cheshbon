@@ -164,8 +164,8 @@ function PracticeFields({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.softLine,
+    backgroundColor: '#F6F8FA',
+    borderColor: '#D8E0E8',
     borderRadius: 8,
     borderWidth: 1,
     gap: spacing.lg,
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   childPractice: {
-    borderLeftColor: colors.green,
+    borderLeftColor: '#647A91',
     borderLeftWidth: 3,
     gap: spacing.md,
     paddingLeft: spacing.md,

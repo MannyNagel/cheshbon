@@ -541,12 +541,12 @@ function TutorialSection() {
     {
       title: 'How to review',
       text:
-        'Use the Review page at night. Start with bedtime and wake time, then move through Morning, Afternoon, Night, and Overview. Answer honestly from memory. You do not need to track every moment during the day.',
+        'Use the Review page at night. Move through Morning, Afternoon, Night, and Overview, then answer any active Avodah prompts. Answer honestly from memory. You do not need to track every moment during the day.',
     },
     {
       title: 'Practices',
       text:
-        'A practice is one thing you review, such as Modeh Ani, Brachot, Eating, Gratitude, or Daily Avodah. When creating one, choose its metric, routine, part of day, domain, whether notes are allowed, whether it is active, and optional reminder settings. A practice can also contain sub-practices with their own metrics and domains.',
+        'Practices are your Foundations: recurring parts of life you want to notice, such as Modeh Ani, Brachot, Eating, or Gratitude. When creating one, choose its metric, routine, part of day, domain, whether notes are allowed, whether it is active, and optional reminder settings. A practice can also contain sub-practices with their own metrics and domains.',
     },
     {
       title: 'Metrics',
@@ -556,7 +556,7 @@ function TutorialSection() {
     {
       title: 'Review sections',
       text:
-        'Review sections are the parts of the day. Morning, Afternoon, Night, and Overview keep the nightly review organized. Overview is for all-day practices like eating, brachot, phone use, middos, gratitude, and current avodah.',
+        'Review sections are the parts of the day. Morning, Afternoon, Night, and Overview keep your Foundations organized. Overview is for all-day practices like eating, brachot, phone use, middos, and gratitude.',
     },
     {
       title: 'Routines',
@@ -589,9 +589,14 @@ function TutorialSection() {
         'Use I need to reset on the Today page when part of the day has gone off track. Choose what knocked you off, name the one thing that matters next, and optionally enter the first action. The nightly review asks whether the reset worked. Reset is never required and does not affect completion, streaks, or practice scores.',
     },
     {
-      title: 'Current Avodah',
+      title: 'Foundations and Avodah',
       text:
-        'Current Avodah is for the thing you want to carry forward. Daily Avodah can hold what you want to work on tomorrow. Weekly Avodah can hold a broader focus from Shabbos. The Today page shows the most recent relevant avodah when it exists.',
+        'Foundations measure how you are living over time. Avodah is a temporary experiment aimed at deliberate change. Choose one Current Avodah and, when useful, one Current Middah. Define the goal, the behavior you will practice, and a review date. Daily prompts collect evidence without turning the experiment into a score.',
+    },
+    {
+      title: 'The Avodah lifecycle',
+      text:
+        'An experiment can begin as a draft or become active immediately. The nightly review asks whether an opportunity arose, how you responded, and what you noticed. Use Weekly Cheshbon for a win, a pattern, and a small adjustment. At the final review, Continue it, Modify it into a linked successor, Graduate it, or Abandon it. Every decision keeps the prior evidence intact.',
     },
     {
       title: 'Reminders',

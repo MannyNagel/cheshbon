@@ -1,10 +1,12 @@
-import { Bell, CalendarDays, Flame, LogIn, NotebookPen, RotateCcw } from 'lucide-react-native';
+import { Bell, CalendarDays, FlaskConical, Flame, LogIn, NotebookPen, RotateCcw } from 'lucide-react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
+import { getCurrentAvodahExperiments, type AvodahExperimentWithStats } from '@/src/repositories/avodahRepo';
 import { getHomeSummary, getOnboardingStatus, getReminderPreferences, type HomeSummary, type ReminderPreferences } from '@/src/repositories/cheshbonRepo';
+import { getNightlyReviewItems } from '@/src/services/activeRoutineService';
 import { getCloudStatus, type CloudStatus } from '@/src/services/cloudSyncService';
 import { addDaysIso, dayName, monthDay, todayIsoDate } from '@/src/utils/dates';
 
@@ -17,6 +19,8 @@ export default function HomeScreen() {
   const [primaryReviewStatus, setPrimaryReviewStatus] = useState<Pick<HomeSummary, 'reviewStarted' | 'reviewComplete'> | null>(null);
   const [reminderPreferences, setReminderPreferences] = useState<ReminderPreferences | null>(null);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  const [experiments, setExperiments] = useState<AvodahExperimentWithStats[]>([]);
+  const [foundationDomains, setFoundationDomains] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -28,8 +32,10 @@ export default function HomeScreen() {
         primaryReviewDate === today ? Promise.resolve(null) : getHomeSummary(primaryReviewDate),
         getReminderPreferences(),
         getOnboardingStatus(),
+        getCurrentAvodahExperiments(),
+        getNightlyReviewItems(today),
       ])
-        .then(([nextSummary, nextPrimaryReviewSummary, nextReminderPreferences, nextOnboardingStatus]) => {
+        .then(([nextSummary, nextPrimaryReviewSummary, nextReminderPreferences, nextOnboardingStatus, nextExperiments, reviewSections]) => {
           if (active) {
             if (nextOnboardingStatus.needsOnboarding) {
               router.replace('/welcome');
@@ -38,6 +44,8 @@ export default function HomeScreen() {
             setSummary(nextSummary);
             setPrimaryReviewStatus(nextPrimaryReviewSummary ?? nextSummary);
             setReminderPreferences(nextReminderPreferences);
+            setExperiments(nextExperiments);
+            setFoundationDomains([...new Set(reviewSections.flatMap((section) => section.items.flatMap((item) => [item.domainName, ...item.subPractices.map((child) => child.domainName)])))].filter(Boolean));
           }
         })
         .finally(() => {
@@ -108,6 +116,43 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.eyebrow}>{dayName(today)}</Text>
         <Text style={styles.hebrewDate}>{formatEnglishDate(today)} | {formatHebrewDate(today)}</Text>
+      </View>
+
+      <View style={styles.avodahSection}>
+        <View style={styles.sectionTitleRow}>
+          <View style={styles.sectionTitleText}>
+            <Text style={styles.avodahEyebrow}>Deliberate growth</Text>
+            <Text style={styles.sectionTitle}>Current Avodah</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/avodah')} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Manage</Text>
+          </Pressable>
+        </View>
+        {experiments.length ? experiments.map((experiment) => (
+          <Pressable accessibilityRole="button" key={experiment.id} onPress={() => router.push({ pathname: '/avodah/edit', params: { id: experiment.id } })} style={styles.avodahCard}>
+            <View style={styles.avodahCardHeader}>
+              <View style={styles.avodahCardTitleBlock}>
+                <Text style={styles.avodahCardEyebrow}>{experiment.type === 'middah' ? 'Current Middah' : 'Current Avodah'}</Text>
+                <Text style={styles.avodahCardTitle}>{experiment.title}</Text>
+              </View>
+              <FlaskConical color={colors.amber} size={20} />
+            </View>
+            <Text style={styles.avodahGoal}>{experiment.goal}</Text>
+            <Text style={styles.avodahBehavior}>{experiment.behavior}</Text>
+            <Text style={styles.avodahMeta}>Review {monthDay(experiment.reviewDate)} · {experiment.stats.opportunities} opportunities noticed</Text>
+          </Pressable>
+        )) : (
+          <Pressable accessibilityRole="button" onPress={() => router.push('/avodah/edit')} style={styles.emptyAvodah}>
+            <FlaskConical color={colors.amber} size={20} />
+            <View style={styles.emptyAvodahText}><Text style={styles.emptyAvodahTitle}>Begin a focused experiment</Text><Text style={styles.emptyText}>Choose one behavior to practice for a defined period.</Text></View>
+          </Pressable>
+        )}
+      </View>
+
+      <View style={styles.foundationBand}>
+        <Text style={styles.foundationEyebrow}>Foundations</Text>
+        <Text style={styles.foundationTitle}>How you are living</Text>
+        <View style={styles.domainRow}>{foundationDomains.map((domain) => <View key={domain} style={styles.domainChip}><Text style={styles.domainChipText}>{domain}</Text></View>)}</View>
       </View>
 
       <View style={styles.primaryPanel}>
@@ -182,19 +227,14 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {summary.currentAvodah.length ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Avodah</Text>
-          {summary.currentAvodah.map((item) => (
-            <GoalCard
-              key={`${item.practiceId}-${item.date}`}
-              title={`${item.practiceName} · ${monthDay(item.date)}`}
-              text={item.text}
-              empty=""
-            />
-          ))}
-        </View>
-      ) : null}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Weekly Cheshbon</Text>
+        <Text style={styles.panelCopy}>Notice a win, a pattern, and what you want to carry forward.</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/weekly-cheshbon')} style={styles.secondaryButton}>
+          <NotebookPen color={colors.ink} size={17} />
+          <Text style={styles.secondaryButtonText}>Open weekly Cheshbon</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Past daily reviews</Text>
@@ -314,6 +354,16 @@ function formatEnglishDate(date: string) {
 }
 
 const styles = StyleSheet.create({
+  avodahBehavior: { backgroundColor: colors.amberSoft, borderRadius: 8, color: colors.ink, fontSize: 14, fontWeight: '800', lineHeight: 20, padding: spacing.md, textAlign: 'left' },
+  avodahCard: { backgroundColor: '#FFFCF6', borderColor: '#E7C98E', borderLeftColor: colors.amber, borderLeftWidth: 4, borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.lg },
+  avodahCardEyebrow: { color: colors.amber, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  avodahCardHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
+  avodahCardTitle: { color: colors.ink, fontSize: 20, fontWeight: '900', textAlign: 'left' },
+  avodahCardTitleBlock: { flex: 1, gap: spacing.xs },
+  avodahEyebrow: { color: colors.amber, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  avodahGoal: { color: colors.ink, fontSize: 15, lineHeight: 21, textAlign: 'left' },
+  avodahMeta: { color: colors.muted, fontSize: 12, fontWeight: '700', textAlign: 'left' },
+  avodahSection: { gap: spacing.md },
   center: {
     alignItems: 'center',
     backgroundColor: colors.paper,
@@ -373,6 +423,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'left',
   },
+  emptyAvodah: { alignItems: 'flex-start', backgroundColor: '#FFFCF6', borderColor: '#E7C98E', borderRadius: 8, borderWidth: 1, flexDirection: 'row', gap: spacing.md, padding: spacing.lg },
+  emptyAvodahText: { flex: 1, gap: spacing.xs },
+  emptyAvodahTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', textAlign: 'left' },
+  foundationBand: { backgroundColor: '#F2F5F8', borderColor: '#D8E0E8', borderRadius: 8, borderWidth: 1, gap: spacing.sm, padding: spacing.lg },
+  foundationEyebrow: { color: '#52677D', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  foundationTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'left' },
+  domainRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  domainChip: { backgroundColor: colors.surface, borderColor: '#C9D4DE', borderRadius: 8, borderWidth: 1, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  domainChipText: { color: '#52677D', fontSize: 12, fontWeight: '800' },
   eyebrow: {
     color: colors.green,
     fontSize: 13,

@@ -74,7 +74,7 @@ date range line
 ## Practice Notes
 ## Questions for Next Week
 
-Use the data only. Mention sparse data when relevant. Keep the report useful and readable.`;
+Distinguish Foundations from Avodah experiments. Foundations are recurring measures of how the person is living and may be summarized quantitatively. Avodah and Middah are temporary growth experiments: discuss their opportunities, responses, evidence, and learning without converting them into a score. Use the data only. Mention sparse data when relevant. Keep the report useful and readable.`;
 }
 
 function buildUserPrompt(data) {
@@ -122,12 +122,39 @@ function buildAnalysisBrief(data) {
     'Resets initiated during the week:',
     formatResetLines(data.resets),
     '',
+    'Avodah experiments:',
+    formatAvodahLines(data.avodahExperiments),
+    '',
     'Blockers:',
     formatBlockerLines(data.blockers),
     '',
     'Notable practice entries and notes:',
     formatEntryLines(data.notableEntries),
   ].join('\n');
+}
+
+function formatAvodahLines(experiments) {
+  const lines = asArray(experiments).map((experiment) => {
+    const evidence = asArray(experiment.evidence)
+      .slice(0, 8)
+      .map((item) => `${item.date}: ${item.response || 'response not recorded'}; ${item.reflection || ''}`)
+      .join(' | ');
+    return [
+      `- ${experiment.title || 'Untitled experiment'} (${experiment.type || 'avodah'})`,
+      `status=${experiment.status || 'unknown'}`,
+      experiment.goal ? `goal="${experiment.goal}"` : null,
+      experiment.behavior ? `behavior="${experiment.behavior}"` : null,
+      `opportunities=${experiment.opportunities ?? 0}`,
+      `no_opportunity=${experiment.noOpportunity ?? 0}`,
+      `did_well=${experiment.didWell ?? 0}`,
+      `mixed=${experiment.mixed ?? 0}`,
+      `missed=${experiment.missed ?? 0}`,
+      evidence ? `evidence=${evidence}` : null,
+      experiment.weeklyLearning ? `weekly_learning="${experiment.weeklyLearning}"` : null,
+      experiment.weeklyDecision ? `weekly_decision=${experiment.weeklyDecision}` : null,
+    ].filter(Boolean).join('; ');
+  });
+  return lines.length ? lines.join('\n') : '- No Avodah experiment overlapped this period.';
 }
 
 function formatResetLines(resets) {
@@ -263,6 +290,25 @@ function buildCompactReportData(data) {
     firstAction: clean(reset.firstAction, TEXT_LIMIT),
     outcome: reset.outcome ?? null,
   }));
+  const avodahExperiments = asArray(data.avodahExperiments).slice(0, 4).map((experiment) => ({
+    type: experiment.type,
+    title: clean(experiment.title, 100),
+    goal: clean(experiment.goal, TEXT_LIMIT),
+    behavior: clean(experiment.behavior, TEXT_LIMIT),
+    status: experiment.status,
+    opportunities: experiment.opportunities,
+    noOpportunity: experiment.noOpportunity,
+    didWell: experiment.didWell,
+    mixed: experiment.mixed,
+    missed: experiment.missed,
+    evidence: asArray(experiment.evidence).slice(0, 10).map((item) => ({
+      date: item.date,
+      response: item.response,
+      reflection: clean(item.reflection, TEXT_LIMIT),
+    })),
+    weeklyLearning: clean(experiment.weeklyLearning, TEXT_LIMIT),
+    weeklyDecision: experiment.weeklyDecision,
+  }));
 
   return {
     weekStart: data.weekStart,
@@ -274,6 +320,7 @@ function buildCompactReportData(data) {
     practices,
     daily,
     resets,
+    avodahExperiments,
     blockers,
     notableEntries,
   };
@@ -300,6 +347,10 @@ function buildTinyReportData(data) {
       })),
     })),
     resets: asArray(data.resets).slice(0, 12),
+    avodahExperiments: asArray(data.avodahExperiments).slice(0, 3).map((experiment) => ({
+      ...experiment,
+      evidence: asArray(experiment.evidence).slice(0, 5),
+    })),
     blockers: asArray(data.blockers).slice(0, 8),
     notableEntries: asArray(data.notableEntries).slice(0, 18).map((entry) => ({
       date: entry.date,
@@ -356,6 +407,17 @@ function buildMinimalReportData(data) {
       trigger: reset.trigger,
       whatMattersNext: clean(reset.whatMattersNext, 100),
       outcome: reset.outcome,
+    })),
+    avodahExperiments: asArray(data.avodahExperiments).slice(0, 2).map((experiment) => ({
+      type: experiment.type,
+      title: experiment.title,
+      goal: clean(experiment.goal, 100),
+      behavior: clean(experiment.behavior, 100),
+      opportunities: experiment.opportunities,
+      didWell: experiment.didWell,
+      mixed: experiment.mixed,
+      missed: experiment.missed,
+      evidence: asArray(experiment.evidence).slice(0, 2).map((item) => ({ date: item.date, response: item.response, reflection: clean(item.reflection, 80) })),
     })),
     blockers: asArray(data.blockers).slice(0, 5).map((blocker) => ({
       name: blocker.name,

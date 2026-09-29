@@ -161,6 +161,9 @@ function setPreference(snapshot, key, value) {
 
 function buildMorningEmail({ snapshot, today, yesterday, user }) {
   const name = displayName(user);
+  const currentExperiments = (snapshot.tables?.avodah_experiments ?? [])
+    .filter((experiment) => experiment?.status === 'active' && experiment?.start_date <= today && experiment?.review_date >= today)
+    .sort((a, b) => String(a.experiment_type).localeCompare(String(b.experiment_type)));
   const dailyAvodah = latestPracticeText(snapshot, today, {
     ids: ['practice_daily_avodah'],
     nameIncludes: ['daily avodah'],
@@ -181,9 +184,17 @@ function buildMorningEmail({ snapshot, today, yesterday, user }) {
     'Here is your Daily Cheshbon morning reminder.',
     '',
     '## Current Avodah',
-    formatAvodahLine('Daily Avodah', dailyAvodah),
-    formatAvodahLine('Weekly Avodah', weeklyAvodah),
-    formatAvodahLine('Monthly Avodah', monthlyAvodah),
+    ...(currentExperiments.length
+      ? currentExperiments.flatMap((experiment) => [
+          `- ${experiment.experiment_type === 'middah' ? 'Current Middah' : 'Current Avodah'}: ${experiment.title}`,
+          `  Today’s practice: ${experiment.behavior}`,
+          `  Goal: ${experiment.goal}`,
+        ])
+      : [
+          formatAvodahLine('Daily Avodah', dailyAvodah),
+          formatAvodahLine('Weekly Avodah', weeklyAvodah),
+          formatAvodahLine('Monthly Avodah', monthlyAvodah),
+        ]),
     '',
     `## Yesterday's Completed Review (${yesterday})`,
     ...completedReview,

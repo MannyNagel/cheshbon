@@ -2,10 +2,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
-import { ensureMetricPrimaryFlags, ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
+import { ensureAvodahRollout, ensureMetricPrimaryFlags, ensureReflectionDefaults, ensureRoshChodeshRoutine, getDb } from '@/src/db/client';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
 import type {
   Blocker,
+  AvodahDailyEntry,
+  AvodahResponse,
   EntryDraft,
   Metric,
   MetricOption,
@@ -570,6 +572,20 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     LOCAL_USER_ID,
     reviewDate,
   );
+  const avodahRows = await db.getAllAsync<{
+    id: string;
+    experiment_id: string;
+    review_date: string;
+    opportunity: number | null;
+    response: AvodahResponse | null;
+    reflection: string | null;
+  }>(
+    `SELECT id, experiment_id, review_date, opportunity, response, reflection
+     FROM avodah_daily_entries
+     WHERE user_id = ? AND review_date = ?`,
+    LOCAL_USER_ID,
+    reviewDate,
+  );
 
   const byEntry = new Map(entries.map((entry) => [entry.id, entry]));
   const draftEntries: Record<string, EntryDraft> = {};
@@ -614,6 +630,7 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     },
     entries: draftEntries,
     resets: resetRows.map(mapResetEvent),
+    avodahEntries: Object.fromEntries(avodahRows.map((row) => [row.experiment_id, mapAvodahDailyEntry(row)])),
   };
 }
 
@@ -778,7 +795,50 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
         reviewDate,
       );
     }
+    for (const entry of Object.values(draft.avodahEntries ?? {})) {
+      if (entry.reviewDate !== reviewDate) continue;
+      const response = normalizeAvodahResponse(entry.response);
+      await db.runAsync(
+        `INSERT INTO avodah_daily_entries
+          (id, user_id, experiment_id, review_date, opportunity, response, reflection)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, experiment_id, review_date) DO UPDATE SET
+          opportunity = excluded.opportunity,
+          response = excluded.response,
+          reflection = excluded.reflection,
+          updated_at = CURRENT_TIMESTAMP`,
+        entry.id || makeId('avodah_daily'),
+        LOCAL_USER_ID,
+        entry.experimentId,
+        reviewDate,
+        entry.opportunity == null ? null : entry.opportunity ? 1 : 0,
+        response,
+        entry.reflection?.trim() || null,
+      );
+    }
   });
+}
+
+function mapAvodahDailyEntry(row: {
+  id: string;
+  experiment_id: string;
+  review_date: string;
+  opportunity: number | null;
+  response: AvodahResponse | null;
+  reflection: string | null;
+}): AvodahDailyEntry {
+  return {
+    id: row.id,
+    experimentId: row.experiment_id,
+    reviewDate: row.review_date,
+    opportunity: row.opportunity == null ? null : row.opportunity === 1,
+    response: normalizeAvodahResponse(row.response),
+    reflection: row.reflection,
+  };
+}
+
+function normalizeAvodahResponse(value: unknown): AvodahResponse | null {
+  return value === 'did_well' || value === 'mixed' || value === 'missed' ? value : null;
 }
 
 function mapResetEvent(row: {
@@ -1756,7 +1816,7 @@ export async function exportAllData() {
 
 export async function exportReadableData() {
   const db = await getDb();
-  const [domains, practices, routines, sessions, resets, entries, weeklyReports] = await Promise.all([
+  const [domains, practices, routines, sessions, resets, entries, weeklyReports, avodahExperiments, avodahEntries, avodahWeeklyReviews, avodahFinalReviews] = await Promise.all([
     db.getAllAsync<{ name: string; description: string | null; active: number }>(
       'SELECT name, description, active FROM domains ORDER BY sort_order, name',
     ),
@@ -1894,6 +1954,19 @@ export async function exportReadableData() {
        FROM weekly_reports
        ORDER BY week_start_date DESC`,
     ),
+    db.getAllAsync<{
+      id: string; experiment_type: string; title: string; goal: string; hypothesis: string | null; behavior: string;
+      start_date: string; review_date: string; status: string; parent_experiment_id: string | null;
+    }>('SELECT id, experiment_type, title, goal, hypothesis, behavior, start_date, review_date, status, parent_experiment_id FROM avodah_experiments ORDER BY start_date DESC'),
+    db.getAllAsync<{
+      experiment_id: string; review_date: string; opportunity: number | null; response: string | null; reflection: string | null;
+    }>('SELECT experiment_id, review_date, opportunity, response, reflection FROM avodah_daily_entries ORDER BY review_date DESC'),
+    db.getAllAsync<{
+      experiment_id: string; week_start_date: string; learning: string | null; decision: string | null;
+    }>('SELECT experiment_id, week_start_date, learning, decision FROM avodah_weekly_reviews ORDER BY week_start_date DESC'),
+    db.getAllAsync<{
+      experiment_id: string; helped: string | null; what_changed: string | null; learned: string | null; decision: string;
+    }>('SELECT experiment_id, helped, what_changed, learned, decision FROM avodah_final_reviews ORDER BY updated_at DESC'),
   ]);
 
   return [
@@ -1916,6 +1989,9 @@ export async function exportReadableData() {
     '## Resets',
     ...formatResetExportRows(resets),
     '',
+    '## Avodah Experiments',
+    ...formatAvodahExportRows(avodahExperiments, avodahEntries, avodahWeeklyReviews, avodahFinalReviews),
+    '',
     '## Practice Entries',
     ...formatReadableEntryRows(entries),
     '',
@@ -1923,6 +1999,33 @@ export async function exportReadableData() {
     ...formatSavedReportRows(weeklyReports),
     '',
   ].join('\n');
+}
+
+function formatAvodahExportRows(
+  experiments: Array<{ id: string; experiment_type: string; title: string; goal: string; hypothesis: string | null; behavior: string; start_date: string; review_date: string; status: string; parent_experiment_id: string | null }>,
+  entries: Array<{ experiment_id: string; review_date: string; opportunity: number | null; response: string | null; reflection: string | null }>,
+  weeklyReviews: Array<{ experiment_id: string; week_start_date: string; learning: string | null; decision: string | null }>,
+  finalReviews: Array<{ experiment_id: string; helped: string | null; what_changed: string | null; learned: string | null; decision: string }>,
+) {
+  if (!experiments.length) return ['No Avodah experiments.'];
+  return experiments.flatMap((experiment) => {
+    const experimentEntries = entries.filter((entry) => entry.experiment_id === experiment.id);
+    const weekly = weeklyReviews.filter((item) => item.experiment_id === experiment.id);
+    const finalReview = finalReviews.find((item) => item.experiment_id === experiment.id);
+    return [
+      `### ${experiment.title} (${experiment.experiment_type})`,
+      `Status: ${experiment.status}`,
+      `Dates: ${experiment.start_date} to ${experiment.review_date}`,
+      `Goal: ${experiment.goal}`,
+      `Behavior: ${experiment.behavior}`,
+      ...(experiment.hypothesis ? [`Hypothesis: ${experiment.hypothesis}`] : []),
+      ...(experiment.parent_experiment_id ? [`Modified from: ${experiment.parent_experiment_id}`] : []),
+      ...experimentEntries.map((entry) => `- ${entry.review_date}: opportunity ${entry.opportunity == null ? 'not answered' : entry.opportunity ? 'yes' : 'no'}${entry.response ? `; response ${entry.response.replace(/_/g, ' ')}` : ''}${entry.reflection ? `; reflection: ${entry.reflection}` : ''}`),
+      ...weekly.map((item) => `- Week of ${item.week_start_date}: ${item.learning || 'No learning recorded'}${item.decision ? `; decision ${item.decision}` : ''}`),
+      ...(finalReview ? [`Final review: helped ${finalReview.helped ?? 'not answered'}; changed: ${finalReview.what_changed || 'not recorded'}; learned: ${finalReview.learned || 'not recorded'}; decision: ${finalReview.decision}`] : []),
+      '',
+    ];
+  });
 }
 
 function formatResetExportRows(
@@ -2132,6 +2235,7 @@ export async function importAllData(exportJson: string) {
   await ensureMetricPrimaryFlags(db);
   await ensureRoshChodeshRoutine(db);
   await ensureReflectionDefaults(db);
+  await ensureAvodahRollout(db);
 }
 
 export async function shareExportJson() {
@@ -2179,6 +2283,10 @@ const exportTableNames = [
   'routine_practices',
   'daily_review_sessions',
   'reset_events',
+  'avodah_experiments',
+  'avodah_daily_entries',
+  'avodah_weekly_reviews',
+  'avodah_final_reviews',
   'daily_entries',
   'entry_metric_values',
   'practice_blockers',

@@ -16,6 +16,7 @@ export function ReviewSection({ section, entries, onEntryChange }: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.header}>
+        <Text style={styles.eyebrow}>Foundations</Text>
         <Text style={styles.title}>{section.name}</Text>
         {section.description ? <Text style={styles.description}>{section.description}</Text> : null}
       </View>
@@ -43,9 +44,8 @@ function groupOverviewItems(items: NightlySection['items']) {
     { title: 'Health', rank: 1, items: [] as NightlySection['items'] },
     { title: 'Spiritual', rank: 2, items: [] as NightlySection['items'] },
     { title: 'Middos', rank: 3, items: [] as NightlySection['items'] },
-    { title: 'Current Avodah', rank: 4, items: [] as NightlySection['items'] },
-    { title: 'Reflection', rank: 5, items: [] as NightlySection['items'] },
-    { title: 'Other', rank: 6, items: [] as NightlySection['items'] },
+    { title: 'Reflection', rank: 4, items: [] as NightlySection['items'] },
+    { title: 'Other', rank: 5, items: [] as NightlySection['items'] },
   ];
   for (const item of items) {
     groups[overviewGroupIndex(item.domainId, item.practiceName)].items.push(item);
@@ -63,9 +63,8 @@ function overviewGroupIndex(domainId: string, practiceName: string) {
   if (domainId === 'domain_health' || name.includes('phone') || name.includes('computer')) return 0;
   if (domainId === 'domain_tefillah_brachot') return 1;
   if (domainId === 'domain_middos') return 2;
-  if (domainId === 'domain_current_avodah') return 3;
-  if (domainId === 'domain_reflection') return 4;
-  return 5;
+  if (domainId === 'domain_reflection') return 3;
+  return 4;
 }
 
 function overviewItemRank(item: NightlySection['items'][number]) {
@@ -95,6 +94,12 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
   },
+  eyebrow: {
+    color: '#52677D',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
   description: {
     color: colors.muted,
     fontSize: 14,
@@ -107,7 +112,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   groupTitle: {
-    color: colors.green,
+    color: '#52677D',
     fontSize: 15,
     fontWeight: '900',
     textTransform: 'uppercase',

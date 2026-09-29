@@ -12,6 +12,7 @@ import {
 } from '@/src/constants/seedData';
 import { schemaSql } from '@/src/db/schema';
 import { normalizeQualityScale } from '@/src/db/qualityScale';
+import { todayIsoDate } from '@/src/utils/dates';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -30,6 +31,8 @@ export async function initializeDatabase() {
   await ensureColumn(db, 'daily_review_sessions', 'bed_time', 'TEXT');
   await ensureColumn(db, 'daily_review_sessions', 'wake_time', 'TEXT');
   await ensureColumn(db, 'daily_review_sessions', 'completed_at', 'TEXT');
+  await ensureColumn(db, 'weekly_reviews', 'keep_doing', 'TEXT');
+  await ensureColumn(db, 'weekly_reviews', 'change_next_week', 'TEXT');
   await ensureColumn(db, 'metrics', 'created_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'updated_at', 'TEXT');
   await ensureColumn(db, 'metrics', 'domain_id', 'TEXT');
@@ -54,6 +57,7 @@ export async function initializeDatabase() {
   await ensureMetricPrimaryFlags(db);
   await ensureRoshChodeshRoutine(db);
   await ensureReflectionDefaults(db);
+  await ensureAvodahRollout(db);
   await normalizeQualityScale(db);
 }
 
@@ -418,6 +422,46 @@ export async function ensureReflectionDefaults(db?: SQLite.SQLiteDatabase) {
   });
 }
 
+export async function ensureAvodahRollout(db?: SQLite.SQLiteDatabase) {
+  const targetDb = db ?? (await getDb());
+  const migrationKey = 'avodah_experiments_rollout_v1';
+  const migrated = await targetDb.getFirstAsync<{ value: string }>('SELECT value FROM app_preferences WHERE key = ?', migrationKey);
+  if (migrated) return;
+  const archivedFrom = todayIsoDate();
+  await targetDb.withTransactionAsync(async () => {
+    await targetDb.runAsync(
+      `UPDATE routine_practices
+       SET enabled = 0,
+        archived_from = COALESCE(archived_from, ?),
+        updated_at = CURRENT_TIMESTAMP
+       WHERE practice_id IN (
+        'practice_daily_avodah',
+        'practice_weekly_avodah',
+        'practice_daily_avodah_review',
+        'practice_weekly_avodah_review'
+       )`,
+      archivedFrom,
+    );
+    await targetDb.runAsync(
+      `UPDATE practices
+       SET active = 0,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (
+        'practice_daily_avodah',
+        'practice_weekly_avodah',
+        'practice_daily_avodah_review',
+        'practice_weekly_avodah_review'
+       )`,
+    );
+    await targetDb.runAsync(
+      `INSERT INTO app_preferences (key, value, updated_at)
+       VALUES (?, '1', CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = CURRENT_TIMESTAMP`,
+      migrationKey,
+    );
+  });
+}
+
 export async function resetDatabaseToSeedDefaults() {
   const db = await getDb();
   await db.execAsync(schemaSql);
@@ -433,6 +477,7 @@ export async function resetDatabaseToSeedDefaults() {
   }
   await seedDatabase(db);
   await ensureReflectionDefaults(db);
+  await ensureAvodahRollout(db);
   await normalizeQualityScale(db);
 }
 
@@ -708,6 +753,10 @@ const resetTableNames = [
   'routine_practices',
   'daily_review_sessions',
   'reset_events',
+  'avodah_experiments',
+  'avodah_daily_entries',
+  'avodah_weekly_reviews',
+  'avodah_final_reviews',
   'daily_entries',
   'entry_metric_values',
   'practice_blockers',

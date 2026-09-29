@@ -61,3 +61,27 @@ test('includes a reset-only day in review history', () => {
 test('removes control characters rejected by Google Docs', () => {
   assert.equal(_test.sanitizeDocumentText('A\u0000B\u0007C'), 'ABC\n');
 });
+
+test('includes Avodah experiments and evidence without turning them into scores', () => {
+  const markdown = _test.buildReadableCloudExport({
+    tables: {
+      avodah_experiments: [{
+        id: 'avodah_1', experiment_type: 'middah', title: 'Patience in interruptions',
+        status: 'active', start_date: '2026-09-20', review_date: '2026-10-04',
+        goal: 'Respond calmly', behavior: 'Pause before answering', hypothesis: 'A pause creates choice',
+      }],
+      avodah_daily_entries: [{
+        experiment_id: 'avodah_1', review_date: '2026-09-27', opportunity: 1,
+        response: 'did_well', reflection: 'Paused and listened first',
+      }],
+      avodah_weekly_reviews: [{ experiment_id: 'avodah_1', week_start_date: '2026-09-26', learning: 'The pause helped', decision: 'continue' }],
+    },
+  });
+
+  assert.match(markdown, /## Avodah Experiments/);
+  assert.match(markdown, /Patience in interruptions \(middah\)/);
+  assert.match(markdown, /Behavior: Pause before answering/);
+  assert.match(markdown, /response did well; reflection: Paused and listened first/);
+  assert.match(markdown, /Week of 2026-09-26: The pause helped; decision continue/);
+  assert.doesNotMatch(markdown, /avodah_1/);
+});

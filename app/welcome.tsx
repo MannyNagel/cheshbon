@@ -290,9 +290,15 @@ function ProductTour({ compact = false }: { compact?: boolean }) {
     },
     {
       icon: <ListChecks color={colors.blue} size={18} />,
-      title: 'Practices that match your real life',
-      text: 'Practices are the questions and habits you review: tefillah, gratitude, phone use, eating, learning, middos, reflections, and anything else you want to notice.',
+      title: 'Foundations that match your real life',
+      text: 'Foundation practices monitor the life you are maintaining: tefillah, gratitude, phone use, eating, learning, middos, reflections, and anything else you want to notice.',
       preview: <PracticesPreview />,
+    },
+    {
+      icon: <Target color={colors.amber} size={18} />,
+      title: 'Avodah gives growth a clear focus',
+      text: 'Run one temporary growth experiment with a specific behavior and review date. Notice opportunities and evidence without turning the work into another score.',
+      preview: <AvodahPreview />,
     },
     {
       icon: <CalendarDays color={colors.green} size={18} />,
@@ -409,6 +415,22 @@ function PracticesPreview() {
           </View>
         </View>
       ))}
+    </PreviewFrame>
+  );
+}
+
+function AvodahPreview() {
+  return (
+    <PreviewFrame title="Current Avodah">
+      <View style={styles.previewAvodahCard}>
+        <Text style={styles.previewAvodahLabel}>DELIBERATE GROWTH</Text>
+        <Text style={styles.previewQuestionText}>Focused morning learning</Text>
+        <Text style={styles.previewMeta}>Behavior: Begin before checking messages.</Text>
+        <View style={styles.previewPills}>
+          <Text style={[styles.previewPill, styles.previewAvodahPill]}>Did well</Text>
+          <Text style={styles.previewPill}>Mixed</Text>
+        </View>
+      </View>
     </PreviewFrame>
   );
 }
@@ -750,6 +772,27 @@ const styles = StyleSheet.create({
   previewColumn: {
     flex: 1,
     minWidth: 250,
+  },
+  previewAvodahCard: {
+    backgroundColor: '#FFFCF6',
+    borderColor: '#E7C98E',
+    borderLeftColor: colors.amber,
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  previewAvodahLabel: {
+    color: colors.amber,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  previewAvodahPill: {
+    backgroundColor: colors.amberSoft,
+    borderColor: colors.amber,
+    color: colors.amber,
   },
   previewFrame: {
     backgroundColor: colors.paper,

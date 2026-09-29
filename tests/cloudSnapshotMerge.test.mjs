@@ -159,3 +159,34 @@ test('keeps a reset and its newer nightly outcome during cloud merge', () => {
   assert.equal(merged.tables.reset_events[0].outcome, 'worked');
   assert.equal(merged.tables.reset_events[0].reviewed_at, '2026-09-29T01:00:00.000Z');
 });
+
+test('keeps Avodah evidence and modification lineage during cloud merge', () => {
+  const cloud = snapshot({
+    avodah_experiments: [{
+      id: 'avodah-1', user_id: 'local', title: 'Focused learning', status: 'active',
+      updated_at: '2026-09-27T22:00:00.000Z',
+    }],
+    avodah_daily_entries: [{
+      id: 'cloud-evidence', user_id: 'local', experiment_id: 'avodah-1', review_date: '2026-09-27',
+      opportunity: 1, response: 'mixed', reflection: 'Started late', updated_at: '2026-09-27T23:00:00.000Z',
+    }],
+  });
+  const local = snapshot({
+    avodah_experiments: [
+      { id: 'avodah-1', user_id: 'local', title: 'Focused learning', status: 'modified', updated_at: '2026-09-28T12:00:00.000Z' },
+      { id: 'avodah-2', user_id: 'local', title: 'Focused learning earlier', status: 'draft', parent_experiment_id: 'avodah-1', updated_at: '2026-09-28T12:00:00.000Z' },
+    ],
+    avodah_daily_entries: [{
+      id: 'local-evidence', user_id: 'local', experiment_id: 'avodah-1', review_date: '2026-09-27',
+      opportunity: 1, response: 'did_well', reflection: 'Recovered and learned', updated_at: '2026-09-28T01:00:00.000Z',
+    }],
+  });
+
+  const merged = mergeCloudSnapshots(local, cloud);
+  assert.equal(merged.tables.avodah_experiments.length, 2);
+  assert.equal(merged.tables.avodah_experiments.find((row) => row.id === 'avodah-1').status, 'modified');
+  assert.equal(merged.tables.avodah_experiments.find((row) => row.id === 'avodah-2').parent_experiment_id, 'avodah-1');
+  assert.equal(merged.tables.avodah_daily_entries.length, 1);
+  assert.equal(merged.tables.avodah_daily_entries[0].response, 'did_well');
+  assert.equal(merged.tables.avodah_daily_entries[0].reflection, 'Recovered and learned');
+});
