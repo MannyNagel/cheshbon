@@ -138,6 +138,7 @@ export type ResetEvent = {
   whatMattersNext: string;
   firstAction?: string | null;
   outcome?: ResetOutcome | null;
+  outcomeReflection?: string | null;
   reviewedAt?: string | null;
 };
 

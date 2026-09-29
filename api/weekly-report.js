@@ -167,6 +167,7 @@ function formatResetLines(resets) {
       reset.whatMattersNext ? `what_mattered_next="${reset.whatMattersNext}"` : null,
       reset.firstAction ? `first_action="${reset.firstAction}"` : null,
       `outcome=${reset.outcome || 'not reviewed'}`,
+      reset.reflection ? `reflection="${reset.reflection}"` : null,
     ].filter(Boolean);
     return parts.join('; ');
   });
@@ -289,6 +290,7 @@ function buildCompactReportData(data) {
     whatMattersNext: clean(reset.whatMattersNext, TEXT_LIMIT),
     firstAction: clean(reset.firstAction, TEXT_LIMIT),
     outcome: reset.outcome ?? null,
+    reflection: clean(reset.reflection, TEXT_LIMIT),
   }));
   const avodahExperiments = asArray(data.avodahExperiments).slice(0, 4).map((experiment) => ({
     type: experiment.type,
@@ -407,6 +409,7 @@ function buildMinimalReportData(data) {
       trigger: reset.trigger,
       whatMattersNext: clean(reset.whatMattersNext, 100),
       outcome: reset.outcome,
+      reflection: clean(reset.reflection, 100),
     })),
     avodahExperiments: asArray(data.avodahExperiments).slice(0, 2).map((experiment) => ({
       type: experiment.type,

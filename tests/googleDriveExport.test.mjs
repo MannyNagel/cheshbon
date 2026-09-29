@@ -24,6 +24,7 @@ test('formats a cloud snapshot as an analysis-ready review history', () => {
         what_matters_next: 'Learning',
         first_action: 'Open Gemara',
         outcome: 'worked',
+        outcome_reflection: 'The first action broke the spiral.',
       }],
       daily_entries: [{ id: 'entry_1', practice_id: 'practice_1', entry_date: '2026-09-27', note: 'Morning walk' }],
       entry_metric_values: [{ entry_id: 'entry_1', metric_id: 'metric_1', value_boolean: 1 }],
@@ -36,7 +37,7 @@ test('formats a cloud snapshot as an analysis-ready review history', () => {
   assert.match(markdown, /sub-practice of: Morning start/);
   assert.match(markdown, /Completed \[Middos\]: yes/);
   assert.match(markdown, /Resets:/);
-  assert.match(markdown, /trigger: Unstructured time; what mattered next: Learning; first action: Open Gemara; outcome: worked/);
+  assert.match(markdown, /trigger: Unstructured time; what mattered next: Learning; first action: Open Gemara; outcome: worked; reflection: The first action broke the spiral\./);
   assert.doesNotMatch(markdown, /session_1|entry_1|metric_1/);
 });
 

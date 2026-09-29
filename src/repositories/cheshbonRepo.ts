@@ -562,10 +562,11 @@ export async function getReviewDraft(reviewDate: string): Promise<NightlyReviewD
     what_matters_next: string;
     first_action: string | null;
     outcome: ResetOutcome | null;
+    outcome_reflection: string | null;
     reviewed_at: string | null;
   }>(
     `SELECT id, reset_date, initiated_at, trigger, trigger_detail, what_matters_next,
-      first_action, outcome, reviewed_at
+      first_action, outcome, outcome_reflection, reviewed_at
      FROM reset_events
      WHERE user_id = ? AND reset_date = ?
      ORDER BY initiated_at`,
@@ -655,6 +656,7 @@ export async function createResetEvent(input: {
     whatMattersNext,
     firstAction: input.firstAction?.trim() || null,
     outcome: null,
+    outcomeReflection: null,
     reviewedAt: null,
   };
   await db.runAsync(
@@ -777,19 +779,26 @@ export async function saveNightlyReview(reviewDate: string, draft: NightlyReview
     for (const reset of draft.resets ?? []) {
       if (reset.resetDate !== reviewDate) continue;
       const outcome = normalizeResetOutcome(reset.outcome);
+      const outcomeReflection = reset.outcomeReflection?.trim() || null;
       await db.runAsync(
         `UPDATE reset_events
          SET reviewed_at = CASE
-            WHEN ? IS NULL THEN NULL
-            WHEN outcome = ? AND reviewed_at IS NOT NULL THEN reviewed_at
+            WHEN ? IS NULL AND ? IS NULL THEN NULL
+            WHEN outcome IS ?
+              AND COALESCE(outcome_reflection, '') = COALESCE(?, '')
+              AND reviewed_at IS NOT NULL THEN reviewed_at
             ELSE CURRENT_TIMESTAMP
           END,
           outcome = ?,
+          outcome_reflection = ?,
           updated_at = CURRENT_TIMESTAMP
          WHERE id = ? AND user_id = ? AND reset_date = ?`,
         outcome,
+        outcomeReflection,
         outcome,
+        outcomeReflection,
         outcome,
+        outcomeReflection,
         reset.id,
         LOCAL_USER_ID,
         reviewDate,
@@ -850,6 +859,7 @@ function mapResetEvent(row: {
   what_matters_next: string;
   first_action: string | null;
   outcome: ResetOutcome | null;
+  outcome_reflection: string | null;
   reviewed_at: string | null;
 }): ResetEvent {
   return {
@@ -861,6 +871,7 @@ function mapResetEvent(row: {
     whatMattersNext: row.what_matters_next,
     firstAction: row.first_action,
     outcome: normalizeResetOutcome(row.outcome),
+    outcomeReflection: row.outcome_reflection,
     reviewedAt: row.reviewed_at,
   };
 }
@@ -1902,6 +1913,7 @@ export async function exportReadableData() {
       what_matters_next: string;
       first_action: string | null;
       outcome: ResetOutcome | null;
+      outcome_reflection: string | null;
     }>(
       `SELECT reset_date,
         initiated_at,
@@ -1909,7 +1921,8 @@ export async function exportReadableData() {
         trigger_detail,
         what_matters_next,
         first_action,
-        outcome
+        outcome,
+        outcome_reflection
        FROM reset_events
        ORDER BY initiated_at DESC`,
     ),
@@ -2037,6 +2050,7 @@ function formatResetExportRows(
     what_matters_next: string;
     first_action: string | null;
     outcome: ResetOutcome | null;
+    outcome_reflection: string | null;
   }>,
 ) {
   if (!rows.length) return ['No reset events.'];
@@ -2047,6 +2061,7 @@ function formatResetExportRows(
       `what mattered next: ${row.what_matters_next}`,
       row.first_action ? `first action: ${row.first_action}` : null,
       `outcome: ${formatResetOutcome(row.outcome)}`,
+      row.outcome_reflection ? `reflection: ${row.outcome_reflection}` : null,
     ]
       .filter(Boolean)
       .join('; '),

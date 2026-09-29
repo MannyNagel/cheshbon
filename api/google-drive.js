@@ -546,6 +546,7 @@ function buildReadableCloudExport(snapshot) {
             `what mattered next: ${textValue(reset.what_matters_next, 'Not recorded')}`,
             reset.first_action ? `first action: ${reset.first_action}` : null,
             `outcome: ${formatCloudResetOutcome(reset.outcome)}`,
+            reset.outcome_reflection ? `reflection: ${reset.outcome_reflection}` : null,
           ].filter(Boolean).join('; '),
         );
       }

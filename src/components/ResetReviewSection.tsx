@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, spacing } from '@/src/components/ui';
 import type { ResetEvent, ResetOutcome } from '@/src/models/types';
@@ -45,6 +45,16 @@ export function ResetReviewSection({ resets, onChange }: { resets: ResetEvent[];
                 );
               })}
             </View>
+            <Text style={styles.reflectionLabel}>How did the reset go?</Text>
+            <TextInput
+              multiline
+              value={reset.outcomeReflection ?? ''}
+              onChangeText={(outcomeReflection) => onChange({ ...reset, outcomeReflection })}
+              placeholder="What helped, or what got in the way?"
+              placeholderTextColor={colors.muted}
+              style={styles.reflectionInput}
+              textAlign="left"
+            />
           </View>
         ))}
       </View>
@@ -111,6 +121,24 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: '900',
+  },
+  reflectionInput: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    minHeight: 76,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    textAlignVertical: 'top',
+  },
+  reflectionLabel: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '700',
   },
   section: {
     gap: spacing.md,

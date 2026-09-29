@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS reset_events (
   what_matters_next TEXT NOT NULL,
   first_action TEXT,
   outcome TEXT,
+  outcome_reflection TEXT,
   reviewed_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

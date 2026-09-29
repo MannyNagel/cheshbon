@@ -43,6 +43,7 @@ type ResetRow = {
   what_matters_next: string;
   first_action: string | null;
   outcome: ResetOutcome | null;
+  outcome_reflection: string | null;
 };
 
 type ScoreSummary = {
@@ -104,6 +105,7 @@ export type WeeklyReportData = {
     whatMattersNext: string;
     firstAction: string | null;
     outcome: ResetOutcome | null;
+    reflection: string | null;
   }>;
   avodahExperiments: Array<{
     id: string;
@@ -278,6 +280,7 @@ export async function getWeeklyReportData(period = getActiveWeeklyReportPeriod()
       whatMattersNext: reset.what_matters_next,
       firstAction: cleanText(reset.first_action),
       outcome: reset.outcome,
+      reflection: cleanText(reset.outcome_reflection),
     })),
     avodahExperiments: avodahData.map((item) => ({
       id: item.experiment.id,
@@ -399,6 +402,7 @@ function formatResetRows(rows: WeeklyReportData['resets']) {
       `what mattered next: ${row.whatMattersNext}`,
       row.firstAction ? `first action: ${row.firstAction}` : null,
       `outcome: ${formatResetOutcome(row.outcome)}`,
+      row.reflection ? `reflection: ${row.reflection}` : null,
     ].filter(Boolean).join('; '),
   );
 }
@@ -586,7 +590,8 @@ async function getResets(startDate: string, endDate: string) {
       trigger_detail,
       what_matters_next,
       first_action,
-      outcome
+      outcome,
+      outcome_reflection
      FROM reset_events
      WHERE user_id = ?
       AND reset_date >= ?

@@ -149,6 +149,7 @@ test('keeps a reset and its newer nightly outcome during cloud merge', () => {
       trigger: 'Unstructured time',
       what_matters_next: 'Learning',
       outcome: 'worked',
+      outcome_reflection: 'I put the phone away and began learning.',
       reviewed_at: '2026-09-29T01:00:00.000Z',
       updated_at: '2026-09-29T01:00:00.000Z',
     }],
@@ -157,6 +158,7 @@ test('keeps a reset and its newer nightly outcome during cloud merge', () => {
   const merged = mergeCloudSnapshots(local, cloud);
   assert.equal(merged.tables.reset_events.length, 1);
   assert.equal(merged.tables.reset_events[0].outcome, 'worked');
+  assert.equal(merged.tables.reset_events[0].outcome_reflection, 'I put the phone away and began learning.');
   assert.equal(merged.tables.reset_events[0].reviewed_at, '2026-09-29T01:00:00.000Z');
 });
 
