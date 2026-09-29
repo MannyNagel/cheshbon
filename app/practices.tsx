@@ -31,7 +31,6 @@ type Options = {
   domains: Array<{ id: string; name: string }>;
   routines: Array<{ id: string; name: string }>;
   reviewSections: Array<{ id: string; name: string }>;
-  parentPractices: Array<{ id: string; name: string }>;
 };
 type TaskRow = {
   routinePracticeId: string;
@@ -88,7 +87,6 @@ type PracticeFormState = {
   metricName: string;
   metricOptions: MetricOptionDraft[];
   subPractices: PracticeMetricDraft[];
-  parentPracticeId: string;
   enabled: boolean;
   allowNote: boolean;
   markable: boolean;
@@ -108,7 +106,6 @@ const emptyForm: PracticeFormState = {
   metricName: 'Quality',
   metricOptions: [],
   subPractices: [],
-  parentPracticeId: '',
   enabled: true,
   allowNote: true,
   markable: false,
@@ -151,7 +148,7 @@ export default function PracticesScreen() {
       }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `Could not load practices: ${JSON.stringify(error)}`);
-      setOptions({ domains: [], routines: [], reviewSections: [], parentPractices: [] });
+      setOptions({ domains: [], routines: [], reviewSections: [] });
     }
   }, []);
 
@@ -269,7 +266,6 @@ export default function PracticesScreen() {
       metricName: primaryMetric?.name ?? 'Quality',
       metricOptions: toMetricOptionDrafts(primaryMetric?.options ?? []),
       subPractices: subPractices.map(toPracticeMetricDraft),
-      parentPracticeId: task.parentPracticeId ?? '',
       enabled: task.enabled === 1,
       allowNote: task.allowNote === 1,
       markable: task.markable === 1,
@@ -521,12 +517,10 @@ export default function PracticesScreen() {
         </View>
       ) : (
         <TaskForm
-          currentPracticeId={editing?.practiceId ?? null}
           form={form}
           options={options}
           reminderPreferences={reminderPreferences}
           setForm={setForm}
-          showParentPicker={mode === 'edit'}
         />
       )}
 
@@ -563,25 +557,17 @@ async function syncedMessage(baseMessage: string) {
 }
 
 function TaskForm({
-  currentPracticeId,
   form,
   options,
   reminderPreferences,
   setForm,
-  showParentPicker,
 }: {
-  currentPracticeId: string | null;
   form: typeof emptyForm;
   options: Options;
   reminderPreferences: ReminderPreferences;
   setForm: React.Dispatch<React.SetStateAction<PracticeFormState>>;
-  showParentPicker: boolean;
 }) {
   const domainChoices = useMemo(() => options.domains, [options.domains]);
-  const parentChoices = useMemo(
-    () => [{ id: '', name: 'Top-level practice' }, ...options.parentPractices.filter((practice) => practice.id !== currentPracticeId)],
-    [currentPracticeId, options.parentPractices],
-  );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const weeklyGoalAvailable = form.primaryMetricEnabled && form.metricKind === 'completed';
   return (
@@ -661,18 +647,6 @@ function TaskForm({
         subPractices={form.subPractices}
         onChange={(subPractices) => setForm((current) => ({ ...current, subPractices }))}
       />
-      {showParentPicker ? (
-        <Field label="Practice structure">
-          <Text style={styles.subPracticeHelp}>
-            Move this practice under another one without changing its ID or history. Its original routine placement is kept if you move it back later.
-          </Text>
-          <ChoiceGrid
-            choices={parentChoices}
-            selectedId={form.parentPracticeId}
-            onSelect={(parentPracticeId) => setForm((current) => ({ ...current, parentPracticeId }))}
-          />
-        </Field>
-      ) : null}
       <Field label="Routine">
         <ChoiceGrid choices={options.routines} selectedId={form.routineId} onSelect={(routineId) => setForm((current) => ({ ...current, routineId }))} />
       </Field>

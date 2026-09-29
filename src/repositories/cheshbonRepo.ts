@@ -1103,15 +1103,12 @@ export async function getSettingsSnapshot() {
 
 export async function getTaskFormOptions() {
   const db = await getDb();
-  const [domains, routines, reviewSections, parentPractices] = await Promise.all([
+  const [domains, routines, reviewSections] = await Promise.all([
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM domains WHERE active = 1 ORDER BY sort_order'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM routine_templates WHERE deleted_at IS NULL ORDER BY active DESC, priority, name'),
     db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM review_sections WHERE active = 1 ORDER BY sort_order'),
-    db.getAllAsync<{ id: string; name: string }>(
-      'SELECT id, name FROM practices WHERE active = 1 AND parent_practice_id IS NULL ORDER BY name',
-    ),
   ]);
-  return { domains, routines, reviewSections, parentPractices };
+  return { domains, routines, reviewSections };
 }
 
 export async function getTasksForManagement() {
@@ -1288,10 +1285,8 @@ export async function updateTask(input: {
   allowNote: boolean;
   markable: boolean;
   weeklyTarget?: number | null;
-  parentPracticeId?: string | null;
 }) {
   const db = await getDb();
-  await validateParentPractice(db, input.practiceId, input.parentPracticeId);
   const currentPlacement = await db.getFirstAsync<{
     routine_template_id: string;
     review_section_id: string;
@@ -1301,13 +1296,11 @@ export async function updateTask(input: {
     currentPlacement?.routine_template_id === input.routineId && currentPlacement.review_section_id === input.reviewSectionId
       ? currentPlacement.sort_order
       : await getNextTaskSortOrder(db, input.routineId, input.reviewSectionId, input.domainId, input.name);
-  const parentSortOrder = await nextParentSortOrder(db, input.practiceId, input.parentPracticeId);
-
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE practices
        SET name = ?, description = ?, domain_id = ?, allow_note = ?, markable = ?, weekly_target = ?,
-         parent_practice_id = ?, parent_sort_order = ?, updated_at = CURRENT_TIMESTAMP
+         updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       input.name.trim(),
       input.description?.trim() || null,
@@ -1315,8 +1308,6 @@ export async function updateTask(input: {
       input.allowNote ? 1 : 0,
       input.markable ? 1 : 0,
       normalizeWeeklyTarget(input.weeklyTarget),
-      input.parentPracticeId || null,
-      parentSortOrder,
       input.practiceId,
     );
     await db.runAsync(
@@ -1376,44 +1367,6 @@ export async function createTask(input: {
       input.enabled === false ? 0 : 1,
     );
   });
-}
-
-async function validateParentPractice(
-  db: Awaited<ReturnType<typeof getDb>>,
-  practiceId: string,
-  parentPracticeId?: string | null,
-) {
-  if (!parentPracticeId) return;
-  if (parentPracticeId === practiceId) throw new Error('A practice cannot be its own parent.');
-  const child = await db.getFirstAsync<{ id: string }>(
-    'SELECT id FROM practices WHERE parent_practice_id = ? AND active = 1 LIMIT 1',
-    practiceId,
-  );
-  if (child) throw new Error('Move this practice\'s existing sub-practices first. Nested sub-practices are not supported.');
-  const parent = await db.getFirstAsync<{ parent_practice_id: string | null }>(
-    'SELECT parent_practice_id FROM practices WHERE id = ? AND active = 1',
-    parentPracticeId,
-  );
-  if (!parent) throw new Error('The selected parent practice is no longer available.');
-  if (parent.parent_practice_id) throw new Error('Choose a top-level practice as the parent.');
-}
-
-async function nextParentSortOrder(
-  db: Awaited<ReturnType<typeof getDb>>,
-  practiceId: string,
-  parentPracticeId?: string | null,
-) {
-  if (!parentPracticeId) return 0;
-  const current = await db.getFirstAsync<{ parent_practice_id: string | null; parent_sort_order: number }>(
-    'SELECT parent_practice_id, parent_sort_order FROM practices WHERE id = ?',
-    practiceId,
-  );
-  if (current?.parent_practice_id === parentPracticeId) return current.parent_sort_order;
-  const max = await db.getFirstAsync<{ value: number | null }>(
-    'SELECT MAX(parent_sort_order) as value FROM practices WHERE parent_practice_id = ?',
-    parentPracticeId,
-  );
-  return (max?.value ?? 0) + 10;
 }
 
 async function replacePracticeMetrics(
