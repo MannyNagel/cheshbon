@@ -6,13 +6,16 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { colors, spacing } from '@/src/components/ui';
 import {
   createTask,
+  getOverviewDomainOrder,
   getTaskFormOptions,
   getTasksForManagement,
   getReminderPreferences,
+  moveOverviewDomain,
   moveTaskWithinReviewSection,
   removeTaskFromTodayForward,
   updateTask,
   type EditablePracticeMetric,
+  type OverviewDomainOrderItem,
   type ReminderPreferences,
 } from '@/src/repositories/cheshbonRepo';
 import { pushLocalDataToCloudIfSignedIn } from '@/src/services/cloudSyncService';
@@ -124,21 +127,25 @@ export default function PracticesScreen() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [reorderMode, setReorderMode] = useState(false);
+  const [reorderTarget, setReorderTarget] = useState<'practices' | 'overview'>('practices');
   const [selectedReorderRoutineId, setSelectedReorderRoutineId] = useState('');
+  const [overviewDomains, setOverviewDomains] = useState<OverviewDomainOrderItem[]>([]);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'inactive'>('active');
   const handledAddParamRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [nextOptions, nextReminderPreferences, nextTasks] = await Promise.all([
+      const [nextOptions, nextReminderPreferences, nextTasks, nextOverviewDomains] = await Promise.all([
         getTaskFormOptions(),
         getReminderPreferences(),
         getTasksForManagement(),
+        getOverviewDomainOrder(),
       ]);
       setOptions(nextOptions);
       setReminderPreferences(nextReminderPreferences);
       setTasks(nextTasks);
+      setOverviewDomains(nextOverviewDomains.filter((domain) => domain.practiceCount > 0));
       setSelectedReorderRoutineId((current) => current || nextOptions.routines[0]?.id || '');
       setForm((current) => ({
         ...current,
@@ -184,7 +191,7 @@ export default function PracticesScreen() {
   const filteredPractices = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return tasks
-      .filter((task) => (reorderMode && selectedReorderRoutineId ? task.routineId === selectedReorderRoutineId : true))
+      .filter((task) => (reorderMode && reorderTarget === 'practices' && selectedReorderRoutineId ? task.routineId === selectedReorderRoutineId : true))
       .filter((task) => {
         if (statusFilter === 'active') return task.enabled === 1;
         if (statusFilter === 'inactive') return task.enabled !== 1;
@@ -194,10 +201,10 @@ export default function PracticesScreen() {
         if (!normalizedQuery) return true;
         return `${task.name} ${task.domainName} ${task.routineName} ${task.reviewSectionName} ${task.metrics.map((metric) => metric.name).join(' ')}`.toLowerCase().includes(normalizedQuery);
       });
-  }, [query, reorderMode, selectedReorderRoutineId, statusFilter, tasks]);
+  }, [query, reorderMode, reorderTarget, selectedReorderRoutineId, statusFilter, tasks]);
   const sortedPractices = useMemo(() => {
     const copy = [...filteredPractices];
-    if (reorderMode) {
+    if (reorderMode && reorderTarget === 'practices') {
       return copy.sort((a, b) => sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
     }
     return copy.sort((a, b) => {
@@ -206,12 +213,12 @@ export default function PracticesScreen() {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       return a.routineName.localeCompare(b.routineName) || sectionRank(a.reviewSectionName) - sectionRank(b.reviewSectionName) || a.sortOrder - b.sortOrder;
     });
-  }, [filteredPractices, reorderMode, sortBy]);
+  }, [filteredPractices, reorderMode, reorderTarget, sortBy]);
   const groupedPractices = useMemo(() => {
     const groups: Array<{ title: string; practices: TaskRow[] }> = [];
     for (const practice of sortedPractices) {
       const title =
-        reorderMode
+        reorderMode && reorderTarget === 'practices'
           ? practice.reviewSectionName
           : sortBy === 'domain'
           ? practice.domainName
@@ -228,7 +235,7 @@ export default function PracticesScreen() {
       }
     }
     return groups;
-  }, [reorderMode, sortBy, sortedPractices]);
+  }, [reorderMode, reorderTarget, sortBy, sortedPractices]);
   const reorderRoutineChoices = useMemo(() => {
     if (!options) return [];
     const routineIdsWithPractices = new Set(tasks.map((task) => task.routineId));
@@ -350,6 +357,20 @@ export default function PracticesScreen() {
     }
   }
 
+  async function moveOverviewSection(domainId: string, direction: 'up' | 'down') {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await moveOverviewDomain(domainId, direction);
+      setMessage(await syncedMessage('Overview section order updated.'));
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not move overview section');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!options || !reminderPreferences) {
     return (
       <View style={styles.center}>
@@ -409,30 +430,46 @@ export default function PracticesScreen() {
       {mode === 'list' ? (
         <View style={styles.list}>
           <View style={styles.filterPanel}>
-            <View style={styles.searchRow}>
-              <Search color={colors.muted} size={18} />
-              <TextInput
-                onChangeText={setQuery}
-                placeholder="Search practices"
-                placeholderTextColor={colors.muted}
-                style={styles.searchInput}
-                value={query}
-              />
-              {query ? (
-                <Pressable accessibilityRole="button" onPress={() => setQuery('')} style={styles.clearButton}>
-                  <X color={colors.ink} size={16} />
-                </Pressable>
-              ) : null}
-            </View>
+            {!reorderMode || reorderTarget === 'practices' ? (
+              <View style={styles.searchRow}>
+                <Search color={colors.muted} size={18} />
+                <TextInput
+                  onChangeText={setQuery}
+                  placeholder="Search practices"
+                  placeholderTextColor={colors.muted}
+                  style={styles.searchInput}
+                  value={query}
+                />
+                {query ? (
+                  <Pressable accessibilityRole="button" onPress={() => setQuery('')} style={styles.clearButton}>
+                    <X color={colors.ink} size={16} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
             {reorderMode ? (
               <>
-                <Text style={styles.label}>Routine to rearrange</Text>
                 <ChoiceGrid
-                  choices={reorderRoutineChoices}
-                  selectedId={selectedReorderRoutineId}
-                  onSelect={setSelectedReorderRoutineId}
+                  choices={[
+                    { id: 'practices', label: 'Practices' },
+                    { id: 'overview', label: 'Overview sections' },
+                  ]}
+                  selectedId={reorderTarget}
+                  onSelect={(id) => setReorderTarget(id as typeof reorderTarget)}
                 />
-                <Text style={styles.filterHelp}>Use the arrows to reorder practices inside this routine. Each review section is ordered separately.</Text>
+                {reorderTarget === 'practices' ? (
+                  <>
+                    <Text style={styles.label}>Routine to rearrange</Text>
+                    <ChoiceGrid
+                      choices={reorderRoutineChoices}
+                      selectedId={selectedReorderRoutineId}
+                      onSelect={setSelectedReorderRoutineId}
+                    />
+                    <Text style={styles.filterHelp}>Use the arrows to reorder practices inside this routine. Each review section is ordered separately.</Text>
+                  </>
+                ) : (
+                  <Text style={styles.filterHelp}>Arrange the domain sections shown in Overview. This order applies across all routines and syncs with your account. Reflection stays last.</Text>
+                )}
               </>
             ) : (
               <>
@@ -453,18 +490,58 @@ export default function PracticesScreen() {
                 />
               </>
             )}
-            <Text style={styles.label}>Show</Text>
-            <ChoiceGrid
-              choices={[
-                { id: 'active', label: 'Active' },
-                { id: 'all', label: 'All' },
-                { id: 'inactive', label: 'Inactive' },
-              ]}
-              selectedId={statusFilter}
-              onSelect={(id) => setStatusFilter(id as typeof statusFilter)}
-            />
+            {!reorderMode || reorderTarget === 'practices' ? (
+              <>
+                <Text style={styles.label}>Show</Text>
+                <ChoiceGrid
+                  choices={[
+                    { id: 'active', label: 'Active' },
+                    { id: 'all', label: 'All' },
+                    { id: 'inactive', label: 'Inactive' },
+                  ]}
+                  selectedId={statusFilter}
+                  onSelect={(id) => setStatusFilter(id as typeof statusFilter)}
+                />
+              </>
+            ) : null}
           </View>
-          {groupedPractices.length ? groupedPractices.map((group) => (
+          {reorderMode && reorderTarget === 'overview' ? (
+            overviewDomains.length ? (
+              <View style={styles.group}>
+                <Text style={styles.groupTitle}>Overview sections</Text>
+                {overviewDomains.map((domain, index) => (
+                  <View key={domain.id} style={styles.taskCard}>
+                    <View style={styles.taskMain}>
+                      <Text style={styles.taskTitle}>{domain.name}</Text>
+                      <Text style={styles.taskMeta}>
+                        {domain.practiceCount} active {domain.practiceCount === 1 ? 'practice' : 'practices'} in Overview
+                      </Text>
+                    </View>
+                    <View style={styles.orderButtons}>
+                      <Pressable
+                        accessibilityLabel={`Move ${domain.name} up`}
+                        accessibilityRole="button"
+                        disabled={saving || index === 0 || domain.id === 'domain_reflection'}
+                        onPress={() => moveOverviewSection(domain.id, 'up')}
+                        style={[styles.orderButton, (saving || index === 0 || domain.id === 'domain_reflection') && styles.orderButtonDisabled]}
+                      >
+                        <ArrowUp color={colors.ink} size={16} />
+                      </Pressable>
+                      <Pressable
+                        accessibilityLabel={`Move ${domain.name} down`}
+                        accessibilityRole="button"
+                        disabled={saving || index === overviewDomains.length - 1 || overviewDomains[index + 1]?.id === 'domain_reflection'}
+                        onPress={() => moveOverviewSection(domain.id, 'down')}
+                        style={[styles.orderButton, (saving || index === overviewDomains.length - 1 || overviewDomains[index + 1]?.id === 'domain_reflection') && styles.orderButtonDisabled]}
+                      >
+                        <ArrowDown color={colors.ink} size={16} />
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : <Text style={styles.emptyText}>No active Overview sections to arrange.</Text>
+          ) : groupedPractices.length ? groupedPractices.map((group) => (
             <View key={group.title} style={styles.group}>
               <Text style={styles.groupTitle}>{group.title}</Text>
               {group.practices.map((task) => (
@@ -484,7 +561,7 @@ export default function PracticesScreen() {
                       {task.weeklyTarget ? ` | weekly goal ${task.weeklyTarget}x` : ''}
                     </Text>
                   </View>
-                  {reorderMode ? (
+                  {reorderMode && reorderTarget === 'practices' ? (
                     <View style={styles.orderButtons}>
                       <Pressable
                         accessibilityLabel={`Move ${task.name} up`}
@@ -1277,6 +1354,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
+  orderButtonDisabled: { opacity: 0.3 },
   orderButtons: {
     alignItems: 'center',
     flexDirection: 'row',

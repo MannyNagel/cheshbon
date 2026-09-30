@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PracticeEntryCard } from '@/src/components/PracticeEntryCard';
 import { colors, spacing } from '@/src/components/ui';
 import type { EntryDraft, NightlyReviewSection as NightlySection } from '@/src/models/types';
+import { groupOverviewItems } from '@/src/utils/overviewGroups';
 
 type Props = {
   section: NightlySection;
@@ -37,49 +38,6 @@ export function ReviewSection({ section, entries, onEntryChange }: Props) {
       </View>
     </View>
   );
-}
-
-function groupOverviewItems(items: NightlySection['items']) {
-  const groups = [
-    { title: 'Health', rank: 1, items: [] as NightlySection['items'] },
-    { title: 'Spiritual', rank: 2, items: [] as NightlySection['items'] },
-    { title: 'Middos', rank: 3, items: [] as NightlySection['items'] },
-    { title: 'Reflection', rank: 4, items: [] as NightlySection['items'] },
-    { title: 'Other', rank: 5, items: [] as NightlySection['items'] },
-  ];
-  for (const item of items) {
-    groups[overviewGroupIndex(item.domainId, item.practiceName)].items.push(item);
-  }
-  return groups
-    .map((group) => ({
-      ...group,
-      items: [...group.items].sort((a, b) => overviewItemRank(a) - overviewItemRank(b) || a.sortOrder - b.sortOrder),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
-function overviewGroupIndex(domainId: string, practiceName: string) {
-  const name = practiceName.toLowerCase();
-  if (domainId === 'domain_health' || name.includes('phone') || name.includes('computer')) return 0;
-  if (domainId === 'domain_tefillah_brachot') return 1;
-  if (domainId === 'domain_middos') return 2;
-  if (domainId === 'domain_reflection') return 3;
-  return 4;
-}
-
-function overviewItemRank(item: NightlySection['items'][number]) {
-  const name = item.practiceName.toLowerCase();
-  if (name.includes('eating')) return 10;
-  if (name.includes('phone') || name.includes('computer')) return 20;
-  if (name.includes('brachot')) return 110;
-  if (name.includes('positivity')) return 210;
-  if (name.includes('complimentary')) return 220;
-  if (name.includes('gratitude')) return 230;
-  if (name.includes('avodah')) return 310;
-  if (name.includes('daily reflection')) return 410;
-  if (name.includes('weekly reflection')) return 420;
-  if (name.includes('monthly reflection')) return 430;
-  return item.sortOrder;
 }
 
 const styles = StyleSheet.create({

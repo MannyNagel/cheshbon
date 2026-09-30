@@ -78,6 +78,7 @@ export type NightlyReviewItem = {
   helpText?: string | null;
   domainId: string;
   domainName: string;
+  domainSortOrder: number;
   reviewSectionId: string;
   reviewSectionName: string;
   sectionSortOrder: number;

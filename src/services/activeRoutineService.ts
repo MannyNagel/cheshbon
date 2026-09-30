@@ -1,7 +1,7 @@
 import { getDb } from '@/src/db/client';
 import { LOCAL_USER_ID } from '@/src/constants/seedData';
 import type { NightlyReviewItem, NightlyReviewSection, RoutineTemplate } from '@/src/models/types';
-import { getMetricsForPracticeIds, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
+import { getMetricsForPracticeIds, getOverviewDomainOrder, getReminderPreferences } from '@/src/repositories/cheshbonRepo';
 import { isDiasporaYomTovDate } from '@/src/services/jewishCalendarService';
 import { addDaysIso, dayOfWeek } from '@/src/utils/dates';
 
@@ -98,9 +98,13 @@ export async function getActiveRoutinesForDate(reviewDate: string): Promise<Rout
 
 export async function getNightlyReviewItems(reviewDate: string): Promise<NightlyReviewSection[]> {
   const db = await getDb();
-  const reminderPreferences = await getReminderPreferences();
-  const activeRoutines = await getActiveRoutinesForDate(reviewDate);
+  const [reminderPreferences, activeRoutines, overviewDomains] = await Promise.all([
+    getReminderPreferences(),
+    getActiveRoutinesForDate(reviewDate),
+    getOverviewDomainOrder(),
+  ]);
   if (activeRoutines.length === 0) return [];
+  const overviewDomainOrder = new Map(overviewDomains.map((domain) => [domain.id, domain.sortOrder]));
 
   const activeRoutineIds = activeRoutines.map((routine) => routine.id);
   const rows = await db.getAllAsync<ReviewItemRow>(
@@ -205,6 +209,7 @@ export async function getNightlyReviewItems(reviewDate: string): Promise<Nightly
     helpText: appendHelpText(row.help_text_override ?? row.practice_description, avodahContextByReviewPractice.get(row.practice_id)),
     domainId: row.domain_id,
     domainName: row.domain_name,
+    domainSortOrder: overviewDomainOrder.get(row.domain_id) ?? Number.MAX_SAFE_INTEGER,
     reviewSectionId: row.review_section_id,
     reviewSectionName: row.review_section_name,
     sectionSortOrder: row.section_sort_order,

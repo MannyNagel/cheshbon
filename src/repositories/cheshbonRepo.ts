@@ -1111,6 +1111,86 @@ export async function getTaskFormOptions() {
   return { domains, routines, reviewSections };
 }
 
+export type OverviewDomainOrderItem = {
+  id: string;
+  name: string;
+  practiceCount: number;
+  sortOrder: number;
+};
+
+const OVERVIEW_DOMAIN_ORDER_KEY = 'overview_domain_order';
+const REFLECTION_DOMAIN_ID = 'domain_reflection';
+
+export async function getOverviewDomainOrder(): Promise<OverviewDomainOrderItem[]> {
+  const db = await getDb();
+  const [rows, preference] = await Promise.all([
+    db.getAllAsync<{ id: string; name: string; practiceCount: number; defaultSortOrder: number }>(
+      `SELECT d.id, d.name,
+        COUNT(DISTINCT CASE
+          WHEN p.active = 1
+            AND rp.enabled = 1
+            AND rp.archived_from IS NULL
+            AND rp.review_section_id = 'section_overall'
+            AND rt.deleted_at IS NULL
+          THEN p.id
+        END) as practiceCount,
+        d.sort_order as defaultSortOrder
+       FROM domains d
+       LEFT JOIN practices p ON p.domain_id = d.id AND p.parent_practice_id IS NULL
+       LEFT JOIN routine_practices rp ON rp.practice_id = p.id
+       LEFT JOIN routine_templates rt ON rt.id = rp.routine_template_id
+       WHERE d.active = 1
+       GROUP BY d.id, d.name, d.sort_order
+       ORDER BY d.sort_order, d.name`,
+    ),
+    db.getFirstAsync<{ value: string }>('SELECT value FROM app_preferences WHERE key = ?', OVERVIEW_DOMAIN_ORDER_KEY),
+  ]);
+  const savedOrder = parseIdOrder(preference?.value);
+  const savedRank = new Map(savedOrder.map((id, index) => [id, index]));
+  const fallbackOffset = savedOrder.length;
+  return rows
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      practiceCount: row.practiceCount,
+      sortOrder: savedRank.get(row.id) ?? fallbackOffset + row.defaultSortOrder,
+    }))
+    .sort((a, b) => {
+      if (a.id === REFLECTION_DOMAIN_ID && b.id !== REFLECTION_DOMAIN_ID) return 1;
+      if (b.id === REFLECTION_DOMAIN_ID && a.id !== REFLECTION_DOMAIN_ID) return -1;
+      return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+    })
+    .map((row, index) => ({ ...row, sortOrder: index }));
+}
+
+export async function moveOverviewDomain(domainId: string, direction: 'up' | 'down') {
+  const db = await getDb();
+  if (domainId === REFLECTION_DOMAIN_ID) return;
+  const rows = await getOverviewDomainOrder();
+  const visibleRows = rows.filter((row) => row.practiceCount > 0);
+  const currentVisibleIndex = visibleRows.findIndex((row) => row.id === domainId);
+  const targetVisibleIndex = direction === 'up' ? currentVisibleIndex - 1 : currentVisibleIndex + 1;
+  if (currentVisibleIndex < 0 || targetVisibleIndex < 0 || targetVisibleIndex >= visibleRows.length) return;
+  const targetDomainId = visibleRows[targetVisibleIndex].id;
+  if (targetDomainId === REFLECTION_DOMAIN_ID) return;
+
+  const reordered = [...rows];
+  const currentIndex = reordered.findIndex((row) => row.id === domainId);
+  const targetIndex = reordered.findIndex((row) => row.id === targetDomainId);
+  [reordered[currentIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[currentIndex]];
+  await setPreference(db, OVERVIEW_DOMAIN_ORDER_KEY, JSON.stringify(reordered.map((row) => row.id)));
+}
+
+function parseIdOrder(value: string | undefined) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getTasksForManagement() {
   const db = await getDb();
   const rows = await db.getAllAsync<{
