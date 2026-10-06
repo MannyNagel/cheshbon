@@ -97,26 +97,34 @@ async function handleCallback(request, response) {
 
 async function handleSync(user, request, response) {
   requireConfiguration();
-  const connection = await getConnection(user.id);
+  const connection = await driveStep('loading the saved Drive connection', () => getConnection(user.id));
   if (!connection) {
     return response.status(200).json({ configured: true, connected: false, synced: false });
   }
 
-  const snapshot = await getCloudSnapshot(user.id);
+  const snapshot = await driveStep('loading the cloud backup', () => getCloudSnapshot(user.id));
   if (!snapshot) throw httpError(404, 'No cloud backup was found for this account.');
-  const markdown = sanitizeDocumentText(buildReadableCloudExport(snapshot));
+  const markdown = await driveStep('preparing the readable export', () =>
+    sanitizeDocumentText(buildReadableCloudExport(snapshot)),
+  );
   if (!markdown) throw httpError(400, 'The Daily Cheshbon export is empty.');
   if (markdown.length > MAX_DOCUMENT_CHARS) {
     throw httpError(413, 'The Google Doc mirror is too large to update. Contact support so it can be divided into yearly documents.');
   }
 
-  const refreshToken = decryptSecret(connection.encrypted_refresh_token);
-  const accessToken = await refreshGoogleAccessToken(refreshToken);
+  const refreshToken = await driveStep('reading the saved Google authorization', () =>
+    decryptSecret(connection.encrypted_refresh_token),
+  );
+  const accessToken = await driveStep('refreshing Google authorization', () =>
+    refreshGoogleAccessToken(refreshToken),
+  );
   let documentId = connection.document_id;
   let documentUrl = connection.document_url;
 
   if (documentId) {
-    const exists = await googleDocumentExists(documentId, accessToken);
+    const exists = await driveStep('opening the existing Google Doc', () =>
+      googleDocumentExists(documentId, accessToken),
+    );
     if (!exists) {
       documentId = null;
       documentUrl = null;
@@ -124,27 +132,33 @@ async function handleSync(user, request, response) {
   }
 
   if (!documentId) {
-    const document = (await findExistingGoogleDocument(accessToken)) || (await createGoogleDocument(accessToken));
+    const document = await driveStep('finding or creating the Google Doc', async () =>
+      (await findExistingGoogleDocument(accessToken)) || (await createGoogleDocument(accessToken)),
+    );
     documentId = document.id;
     documentUrl = document.webViewLink || googleDocumentUrl(documentId);
 
     // Remember the file before inserting content. If Google Docs rejects the
     // write, a retry should repair this document instead of creating another.
-    await updateConnection(user.id, {
-      document_id: documentId,
-      document_url: documentUrl,
-      updated_at: new Date().toISOString(),
-    });
+    await driveStep('saving the Google Doc reference', () =>
+      updateConnection(user.id, {
+        document_id: documentId,
+        document_url: documentUrl,
+        updated_at: new Date().toISOString(),
+      }),
+    );
   }
 
-  await replaceGoogleDocument(documentId, markdown, accessToken);
+  await driveStep('writing the Google Doc', () => replaceGoogleDocument(documentId, markdown, accessToken));
   const lastSyncedAt = new Date().toISOString();
-  await updateConnection(user.id, {
-    document_id: documentId,
-    document_url: documentUrl || googleDocumentUrl(documentId),
-    last_synced_at: lastSyncedAt,
-    updated_at: lastSyncedAt,
-  });
+  await driveStep('saving the completed backup time', () =>
+    updateConnection(user.id, {
+      document_id: documentId,
+      document_url: documentUrl || googleDocumentUrl(documentId),
+      last_synced_at: lastSyncedAt,
+      updated_at: lastSyncedAt,
+    }),
+  );
 
   return response.status(200).json({
     configured: true,
@@ -153,6 +167,18 @@ async function handleSync(user, request, response) {
     documentUrl: documentUrl || googleDocumentUrl(documentId),
     lastSyncedAt,
   });
+}
+
+async function driveStep(description, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error?.expose || (error?.statusCode && error.statusCode < 500)) throw error;
+    console.error(`Google Drive failed while ${description}.`, error);
+    const wrapped = httpError(502, `Google Drive failed while ${description}.`);
+    wrapped.expose = true;
+    throw wrapped;
+  }
 }
 
 async function handleDisconnect(user, response) {
