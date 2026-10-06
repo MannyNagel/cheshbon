@@ -68,7 +68,7 @@ async function readPayload<T>(response: Response, fallback: string): Promise<T> 
     if (response.status === 504) {
       throw new Error('The Google Drive update timed out before it finished. Please try again.');
     }
-    throw new Error(payload?.error ?? fallback);
+    throw new Error(payload?.error ?? `${fallback} (server response ${response.status || 'unknown'})`);
   }
   return payload;
 }

@@ -8,6 +8,7 @@ const MAX_DOCUMENT_CHARS = 900_000;
 const DOCUMENT_NAME = 'Daily Cheshbon Data Mirror';
 
 module.exports = async function handler(request, response) {
+  response.setHeader('X-Daily-Cheshbon-Drive-Version', '2026-10-06-2');
   const action = readQueryValue(request.query?.action) || 'status';
 
   try {
