@@ -12,7 +12,7 @@ module.exports = async function handler(request, response) {
   const action = readQueryValue(request.query?.action) || 'status';
 
   try {
-    if (action === 'callback') return handleCallback(request, response);
+    if (action === 'callback') return await handleCallback(request, response);
 
     // Configuration names are safe to expose and make deployment setup issues
     // diagnosable without revealing any secret values.
@@ -25,10 +25,10 @@ module.exports = async function handler(request, response) {
     }
 
     const user = await getSupabaseUser(request.headers.authorization);
-    if (action === 'status' && request.method === 'GET') return handleStatus(user, response);
-    if (action === 'auth-url' && request.method === 'GET') return handleAuthUrl(user, response);
-    if (action === 'sync' && request.method === 'POST') return handleSync(user, request, response);
-    if (action === 'disconnect' && request.method === 'DELETE') return handleDisconnect(user, response);
+    if (action === 'status' && request.method === 'GET') return await handleStatus(user, response);
+    if (action === 'auth-url' && request.method === 'GET') return await handleAuthUrl(user, response);
+    if (action === 'sync' && request.method === 'POST') return await handleSync(user, request, response);
+    if (action === 'disconnect' && request.method === 'DELETE') return await handleDisconnect(user, response);
 
     response.setHeader('Allow', 'GET, POST, DELETE');
     return response.status(405).json({ error: 'Method not allowed.' });

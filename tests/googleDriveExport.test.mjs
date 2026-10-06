@@ -3,7 +3,74 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { _test } = require('../api/google-drive.js');
+const googleDriveHandler = require('../api/google-drive.js');
+const { _test } = googleDriveHandler;
+
+test('returns handled errors when an asynchronous Drive action fails', async () => {
+  const originalFetch = globalThis.fetch;
+  const environment = {
+    GOOGLE_DRIVE_CLIENT_ID: process.env.GOOGLE_DRIVE_CLIENT_ID,
+    GOOGLE_DRIVE_CLIENT_SECRET: process.env.GOOGLE_DRIVE_CLIENT_SECRET,
+    GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY: process.env.GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  };
+
+  Object.assign(process.env, {
+    GOOGLE_DRIVE_CLIENT_ID: 'client-id',
+    GOOGLE_DRIVE_CLIENT_SECRET: 'client-secret',
+    GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY: 'test-encryption-key',
+    SUPABASE_SERVICE_ROLE_KEY: 'service-key',
+    EXPO_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
+    EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
+  });
+
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    if (fetchCount === 1) {
+      return new Response(JSON.stringify({ id: 'user_1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response('database unavailable', { status: 503 });
+  };
+
+  const response = {
+    body: null,
+    statusCode: null,
+    setHeader() {},
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+
+  try {
+    await googleDriveHandler({
+      method: 'POST',
+      query: { action: 'sync' },
+      headers: { authorization: 'Bearer access-token' },
+    }, response);
+
+    assert.equal(response.statusCode, 502);
+    assert.deepEqual(response.body, {
+      error: 'Google Drive failed while loading the saved Drive connection.',
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [name, value] of Object.entries(environment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
 
 test('formats a cloud snapshot as an analysis-ready review history', () => {
   const markdown = _test.buildReadableCloudExport({
