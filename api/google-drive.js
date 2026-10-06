@@ -8,7 +8,7 @@ const MAX_DOCUMENT_CHARS = 900_000;
 const DOCUMENT_NAME = 'Daily Cheshbon Data Mirror';
 
 module.exports = async function handler(request, response) {
-  response.setHeader('X-Daily-Cheshbon-Drive-Version', '2026-10-06-2');
+  response.setHeader('X-Daily-Cheshbon-Drive-Version', '2026-10-06-3');
   const action = readQueryValue(request.query?.action) || 'status';
 
   try {
@@ -33,9 +33,11 @@ module.exports = async function handler(request, response) {
     response.setHeader('Allow', 'GET, POST, DELETE');
     return response.status(405).json({ error: 'Method not allowed.' });
   } catch (error) {
-    return response.status(error?.statusCode ?? 500).json({
+    const payload = {
       error: publicErrorMessage(error),
-    });
+    };
+    if (error?.code) payload.code = error.code;
+    return response.status(error?.statusCode ?? 500).json(payload);
   }
 };
 
@@ -226,7 +228,9 @@ async function refreshGoogleAccessToken(refreshToken) {
   });
   const payload = await result.json().catch(() => null);
   if (!result.ok || !payload?.access_token) {
-    throw httpError(401, 'Google Drive access expired. Reconnect Google Drive in Settings.');
+    const error = httpError(401, 'Google Drive access expired. Reconnect Google Drive in Settings.');
+    error.code = 'GOOGLE_DRIVE_RECONNECT_REQUIRED';
+    throw error;
   }
   return payload.access_token;
 }

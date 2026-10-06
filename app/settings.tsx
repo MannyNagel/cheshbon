@@ -32,6 +32,7 @@ import {
   connectGoogleDrive,
   disconnectGoogleDrive,
   getGoogleDriveStatus,
+  GoogleDriveRequestError,
   syncGoogleDriveMirror,
   type GoogleDriveStatus,
 } from '@/src/services/googleDriveService';
@@ -331,6 +332,7 @@ function GoogleDriveMirrorSection({
   setMessage: (message: string | null) => void;
 }) {
   const [updating, setUpdating] = useState(false);
+  const [reconnectRequired, setReconnectRequired] = useState(false);
 
   async function connect() {
     setBusy(true);
@@ -349,9 +351,13 @@ function GoogleDriveMirrorSection({
     setMessage(null);
     try {
       const nextStatus = await syncGoogleDriveMirror();
+      setReconnectRequired(false);
       onStatusChange(nextStatus);
       setMessage(`Google Doc updated: ${formatDateTime(nextStatus.lastSyncedAt ?? new Date().toISOString())}`);
     } catch (error) {
+      if (error instanceof GoogleDriveRequestError && error.code === 'GOOGLE_DRIVE_RECONNECT_REQUIRED') {
+        setReconnectRequired(true);
+      }
       setMessage(error instanceof Error ? error.message : 'Could not update the Google Doc mirror.');
     } finally {
       setUpdating(false);
@@ -394,12 +400,21 @@ function GoogleDriveMirrorSection({
       <View style={styles.actions}>
         {status.connected ? (
           <>
-            <ActionButton
-              disabled={busy}
-              icon={<RefreshCw color={colors.ink} size={17} />}
-              label={updating ? 'Updating...' : 'Update now'}
-              onPress={updateMirror}
-            />
+            {reconnectRequired ? (
+              <ActionButton
+                disabled={busy}
+                icon={<HardDrive color={colors.ink} size={17} />}
+                label="Reconnect Google Drive"
+                onPress={connect}
+              />
+            ) : (
+              <ActionButton
+                disabled={busy}
+                icon={<RefreshCw color={colors.ink} size={17} />}
+                label={updating ? 'Updating...' : 'Update now'}
+                onPress={updateMirror}
+              />
+            )}
             {status.documentUrl ? (
               <ActionButton
                 disabled={busy}

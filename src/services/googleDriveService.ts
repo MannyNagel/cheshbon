@@ -9,6 +9,13 @@ export type GoogleDriveStatus = {
   lastSyncedAt: string | null;
 };
 
+export class GoogleDriveRequestError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = 'GoogleDriveRequestError';
+  }
+}
+
 export async function getGoogleDriveStatus(): Promise<GoogleDriveStatus> {
   const response = await authenticatedRequest('/api/google-drive?action=status');
   return readPayload<GoogleDriveStatus>(response, 'Could not read Google Drive status.');
@@ -63,12 +70,15 @@ async function authenticatedRequest(path: string, init: RequestInit = {}) {
 }
 
 async function readPayload<T>(response: Response, fallback: string): Promise<T> {
-  const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
+  const payload = (await response.json().catch(() => null)) as (T & { error?: string; code?: string }) | null;
   if (!response.ok || !payload) {
     if (response.status === 504) {
-      throw new Error('The Google Drive update timed out before it finished. Please try again.');
+      throw new GoogleDriveRequestError('The Google Drive update timed out before it finished. Please try again.');
     }
-    throw new Error(payload?.error ?? `${fallback} (server response ${response.status || 'unknown'})`);
+    throw new GoogleDriveRequestError(
+      payload?.error ?? `${fallback} (server response ${response.status || 'unknown'})`,
+      payload?.code,
+    );
   }
   return payload;
 }
