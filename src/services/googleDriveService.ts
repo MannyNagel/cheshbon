@@ -64,7 +64,12 @@ async function authenticatedRequest(path: string, init: RequestInit = {}) {
 
 async function readPayload<T>(response: Response, fallback: string): Promise<T> {
   const payload = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!response.ok || !payload) throw new Error(payload?.error ?? fallback);
+  if (!response.ok || !payload) {
+    if (response.status === 504) {
+      throw new Error('The Google Drive update timed out before it finished. Please try again.');
+    }
+    throw new Error(payload?.error ?? fallback);
+  }
   return payload;
 }
 

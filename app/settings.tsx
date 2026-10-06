@@ -330,6 +330,8 @@ function GoogleDriveMirrorSection({
   setBusy: (busy: boolean) => void;
   setMessage: (message: string | null) => void;
 }) {
+  const [updating, setUpdating] = useState(false);
+
   async function connect() {
     setBusy(true);
     setMessage(null);
@@ -343,6 +345,7 @@ function GoogleDriveMirrorSection({
 
   async function updateMirror() {
     setBusy(true);
+    setUpdating(true);
     setMessage(null);
     try {
       const nextStatus = await syncGoogleDriveMirror();
@@ -351,6 +354,7 @@ function GoogleDriveMirrorSection({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update the Google Doc mirror.');
     } finally {
+      setUpdating(false);
       setBusy(false);
     }
   }
@@ -393,7 +397,7 @@ function GoogleDriveMirrorSection({
             <ActionButton
               disabled={busy}
               icon={<RefreshCw color={colors.ink} size={17} />}
-              label="Update now"
+              label={updating ? 'Updating...' : 'Update now'}
               onPress={updateMirror}
             />
             {status.documentUrl ? (

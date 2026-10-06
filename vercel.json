@@ -3,6 +3,11 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
+  "functions": {
+    "api/google-drive.js": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/daily-morning-reminder",
